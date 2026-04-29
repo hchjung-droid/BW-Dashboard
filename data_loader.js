@@ -470,24 +470,38 @@ function parsePurchase(rows, codeMap) {
 // 5. 발주서 PARSER → po, vdd
 // ============================================================
 /**
- * 발주서 시트 파싱
- * 컬럼: 0:일자-No, 1:거래처명, 2:담당자명, 3:품목명[규격명],
- *       4:희망납기일, 5:발주금액합계, 6:진행상태
+ * 발주서현황 시트 파싱
+ * 컬럼: 0:일자-No, 1:희망납기일, 2:품목코드, 3:품목명[규격],
+ *       4:수량, 5:단가, 6:공급가액, 7:거래처
  * skipRows=2
  */
 function parseOrders(rows) {
   const records = [];
+  const today = new Date();
   for (const row of rows) {
     const dateNo = _s(row[0]);
     if (!dateNo || !/^\d{4}\//.test(dateNo)) continue;
+    const dueDate = _s(row[1]);
+    // status 추정: 납기일이 오늘 이전이면 완료, 아니면 진행중
+    let status = '';
+    if (dueDate) {
+      try {
+        const parts = dueDate.trim().split(/[\/ -]/);
+        const dd = new Date(+parts[0], +parts[1]-1, +parts[2]);
+        status = dd <= today ? '완료' : '진행중';
+      } catch(e) { status = ''; }
+    }
     records.push({
       date_no: dateNo,
-      vendor: _s(row[1]),
-      manager: _s(row[2]),
+      due_date: dueDate,
+      sku_id: _s(row[2]),
       item_name: _s(row[3]),
-      due_date: _s(row[4]),
-      amount: Math.round(_n(row[5])),
-      status: _s(row[6]),
+      qty: _ni(row[4]),
+      unit_price: Math.round(_n(row[5])),
+      amount: Math.round(_n(row[6])),
+      vendor: _s(row[7]),
+      manager: '',
+      status: status,
     });
   }
   console.log(`[DataLoader] Orders: ${records.length} records`);

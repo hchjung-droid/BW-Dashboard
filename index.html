@@ -93,6 +93,31 @@ tr.clickable:focus-visible td{background:rgba(37,99,235,.12);outline:none}
 <script src="config.js"></script>
 <script src="data_loader.js"></script>
 <script>
+// ========== LOGIN GATE ==========
+const _AUTH_KEY='scm_auth';
+function _showLogin(msg){
+  document.getElementById('app').innerHTML=`<div style="display:flex;align-items:center;justify-content:center;height:100vh;flex-direction:column;background:linear-gradient(135deg,#0f172a 0%,#1e293b 100%)">
+    <div style="background:#fff;border-radius:16px;padding:40px;box-shadow:0 20px 60px rgba(0,0,0,.3);text-align:center;min-width:320px">
+      <div style="font-size:28px;margin-bottom:8px">📊</div>
+      <h2 style="margin:0 0 4px;font-size:18px;color:#1e293b">SCM Dashboard</h2>
+      <p style="margin:0 0 24px;font-size:12px;color:#94a3b8">비버웍스 공급망관리 시스템</p>
+      ${msg?`<p style="color:#ef4444;font-size:12px;margin-bottom:12px">${msg}</p>`:''}
+      <input type="password" id="pw-input" placeholder="비밀번호 입력" onkeydown="if(event.key==='Enter')_doLogin()"
+        style="width:100%;padding:10px 14px;border:1px solid #e2e8f0;border-radius:8px;font-size:14px;box-sizing:border-box;margin-bottom:12px;outline:none;transition:border .2s"
+        onfocus="this.style.borderColor='#2563eb'" onblur="this.style.borderColor='#e2e8f0'">
+      <button onclick="_doLogin()" style="width:100%;padding:10px;background:#2563eb;color:#fff;border:none;border-radius:8px;font-size:14px;font-weight:600;cursor:pointer;transition:background .2s"
+        onmouseover="this.style.background='#1d4ed8'" onmouseout="this.style.background='#2563eb'">로그인</button>
+    </div>
+  </div>`;
+  setTimeout(()=>{const el=document.getElementById('pw-input');if(el)el.focus()},100);
+}
+function _doLogin(){
+  const pw=document.getElementById('pw-input').value;
+  if(pw==='sku'){sessionStorage.setItem(_AUTH_KEY,'1');location.reload()}
+  else{_showLogin('비밀번호가 올바르지 않습니다.')}
+}
+if(sessionStorage.getItem(_AUTH_KEY)!=='1'){_showLogin();throw new Error('auth_gate')}
+
 // ========== LOADING UI ==========
 document.getElementById('app').innerHTML='<div style="display:flex;align-items:center;justify-content:center;height:100vh;flex-direction:column"><div style="width:40px;height:40px;border:4px solid #e2e8f0;border-top:4px solid #2563eb;border-radius:50%;animation:spin 1s linear infinite"></div><p id="load-msg" style="margin-top:16px;color:#475569;font-size:14px">데이터 로딩 중...</p><div style="width:300px;height:4px;background:#e2e8f0;border-radius:2px;margin-top:12px;overflow:hidden"><div id="load-fill" style="width:0%;height:100%;background:#2563eb;transition:width 0.3s"></div></div></div>';
 (function(){const st=document.createElement('style');st.textContent='@keyframes spin{to{transform:rotate(360deg)}}';document.head.appendChild(st)})();
@@ -1980,20 +2005,19 @@ function pgOrd(){
   if(S.ordFilterCol!=='all'&&S.ordFilterVal!=='all'){
     poList=poList.filter(p=>{
       if(S.ordFilterCol==='vendor')return p.vendor===S.ordFilterVal;
-      if(S.ordFilterCol==='manager')return p.manager===S.ordFilterVal;
       if(S.ordFilterCol==='item')return p.item_name===S.ordFilterVal;
       if(S.ordFilterCol==='status')return p.status===S.ordFilterVal;
       if(S.ordFilterCol==='date')return cleanDate(p.date_no)===S.ordFilterVal;
       return true;
     });
   }
-  if(S.search){const q=S.search.toLowerCase();poList=poList.filter(p=>p.item_name.toLowerCase().includes(q)||p.vendor.toLowerCase().includes(q)||p.manager.toLowerCase().includes(q))}
+  if(S.search){const q=S.search.toLowerCase();poList=poList.filter(p=>p.item_name.toLowerCase().includes(q)||p.vendor.toLowerCase().includes(q)||(p.sku_id||'').toLowerCase().includes(q))}
 
   // Sort
   const getter=(p,col)=>{
     if(col==='date')return p.date_no;
     if(col==='vendor')return p.vendor;
-    if(col==='manager')return p.manager;
+    if(col==='qty')return p.qty||0;
     if(col==='item')return p.item_name;
     if(col==='due')return p.due_date;
     if(col==='lead'){const ld=calcLeadDays(p.date_no.split(' ')[0],p.due_date.trim());return ld||0}
@@ -2112,7 +2136,6 @@ function pgOrd(){
     <select onchange="S.ordFilterCol=this.value;S.ordFilterVal='all';render()">
       <option value="all">필터 항목 선택</option>
       <option value="vendor" ${S.ordFilterCol==='vendor'?'selected':''}>거래처</option>
-      <option value="manager" ${S.ordFilterCol==='manager'?'selected':''}>담당자</option>
       <option value="item" ${S.ordFilterCol==='item'?'selected':''}>품목</option>
       <option value="status" ${S.ordFilterCol==='status'?'selected':''}>상태</option>
     </select>
@@ -2120,7 +2143,6 @@ function pgOrd(){
       const base=D.po.filter(p=>p.vendor!=='nan'&&p.item_name!=='nan');
       let vals=[];
       if(S.ordFilterCol==='vendor')vals=[...new Set(base.map(p=>p.vendor))].sort();
-      if(S.ordFilterCol==='manager')vals=[...new Set(base.map(p=>p.manager))].sort();
       if(S.ordFilterCol==='item')vals=[...new Set(base.map(p=>p.item_name))].sort();
       if(S.ordFilterCol==='status')vals=[...new Set(base.map(p=>p.status))];
       return`<select onchange="S.ordFilterVal=this.value;render()">
@@ -2135,8 +2157,8 @@ function pgOrd(){
     <thead><tr>
       <th class="sortable" onclick="toggleOrdSort('date')">일자 ${sortIcon('date')}</th>
       <th class="sortable" onclick="toggleOrdSort('vendor')">거래처 ${sortIcon('vendor')}</th>
-      <th class="sortable" onclick="toggleOrdSort('manager')">담당 ${sortIcon('manager')}</th>
       <th class="sortable" onclick="toggleOrdSort('item')">품목 ${sortIcon('item')}</th>
+      <th class="sortable tr" onclick="toggleOrdSort('qty')">수량 ${sortIcon('qty')}</th>
       <th class="sortable" onclick="toggleOrdSort('due')">납기일 ${sortIcon('due')}</th>
       <th class="sortable tr" onclick="toggleOrdSort('lead')" style="color:var(--ac2)">소요일 ${sortIcon('lead')}</th>
       <th class="sortable tr" onclick="toggleOrdSort('amount')">금액 ${sortIcon('amount')}</th>
@@ -2144,12 +2166,13 @@ function pgOrd(){
     </tr></thead>
     <tbody>${poList.map((p,idx)=>{
       const ld=calcLeadDays(p.date_no.split(' ')[0],p.due_date.trim());
-      return`<tr class="clickable" onclick="openOrder(${D.po.indexOf(p)})"><td style="white-space:nowrap">${cleanDate(p.date_no)}</td><td>${p.vendor}</td><td>${p.manager}</td>
-      <td style="max-width:220px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${p.item_name}</td>
+      return`<tr class="clickable" onclick="openOrder(${D.po.indexOf(p)})"><td style="white-space:nowrap">${cleanDate(p.date_no)}</td><td>${p.vendor}</td>
+      <td style="max-width:220px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${p.sku_id||''}">${p.item_name}</td>
+      <td class="tr">${p.qty||''}</td>
       <td style="white-space:nowrap">${cleanDate(p.due_date)}</td>
       <td class="tr" style="color:var(--ac2)">${ld!=null?ld+'일':'-'}</td>
       <td class="tr">${fmtM(p.amount)}</td>
-      <td><span class="tg ${p.status==='완료'?'tg-g':p.status==='진행중'?'tg-y':'tg-r'}">${p.status}</span></td></tr>`}).join('')}</tbody></table></div></div>`;
+      <td><span class="tg ${p.status==='완료'?'tg-g':p.status==='진행중'?'tg-y':'tg-r'}">${p.status||'-'}</span></td></tr>`}).join('')}</tbody></table></div></div>`;
 }
 
 // ═══════════════ SALES ═══════════════
@@ -3047,7 +3070,7 @@ function renderVendorModal(){
         <td style="white-space:nowrap">${p.due_date}</td>
         <td class="tr" style="color:var(--ac2)">${ld!=null?ld+'일':'-'}</td>
         <td class="tr">${fmtM(p.amount)}</td>
-        <td><span class="tg ${p.status==='완료'?'tg-g':'tg-y'}">${p.status}</span></td></tr>`}).join('')}</tbody></table></div>
+        <td><span class="tg ${p.status==='완료'?'tg-g':'tg-y'}">${p.status||'-'}</span></td></tr>`}).join('')}</tbody></table></div>
   </div></div>`;
 }
 
@@ -3154,7 +3177,7 @@ function renderOrderModal(){
 
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin:16px 0">
       <div style="padding:10px;background:var(--sf2);border-radius:8px">
-        <div style="font-size:10px;color:var(--tx2);margin-bottom:4px">품목명</div>
+        <div style="font-size:10px;color:var(--tx2);margin-bottom:4px">품목명${p.sku_id?' ('+p.sku_id+')':''}</div>
         <div style="font-size:13px;font-weight:600">${p.item_name}</div>
       </div>
       <div style="padding:10px;background:var(--sf2);border-radius:8px">
@@ -3167,9 +3190,10 @@ function renderOrderModal(){
       <div class="kc"><div class="lb">발주일</div><div class="vl" style="font-size:14px">${cleanDate(p.date_no)}</div></div>
       <div class="kc"><div class="lb">납기일</div><div class="vl" style="font-size:14px">${cleanDate(p.due_date)}</div></div>
       <div class="kc"><div class="lb">소요일</div><div class="vl" style="font-size:14px;color:var(--ac2)">${ld!=null?ld+'일':'-'}</div></div>
+      <div class="kc"><div class="lb">수량</div><div class="vl" style="font-size:14px">${fmt(p.qty||0)}</div></div>
+      <div class="kc"><div class="lb">단가</div><div class="vl" style="font-size:14px">${fmtM(p.unit_price||0)}</div></div>
       <div class="kc"><div class="lb">금액</div><div class="vl" style="font-size:14px;color:var(--gn)">${fmtM(p.amount)}</div></div>
-      <div class="kc"><div class="lb">담당자</div><div class="vl" style="font-size:14px">${p.manager}</div></div>
-      <div class="kc"><div class="lb">상태</div><div class="vl"><span class="tg ${p.status==='완료'?'tg-g':p.status==='진행중'?'tg-y':'tg-r'}" style="font-size:12px">${p.status}</span></div></div>
+      <div class="kc"><div class="lb">상태</div><div class="vl"><span class="tg ${p.status==='완료'?'tg-g':p.status==='진행중'?'tg-y':'tg-r'}" style="font-size:12px">${p.status||'-'}</span></div></div>
     </div>
 
     ${matchInv.length>0?`<div style="margin-bottom:16px">
@@ -3189,11 +3213,12 @@ function renderOrderModal(){
     <div style="margin-bottom:16px">
       <div style="font-weight:600;margin-bottom:8px;color:var(--pp)">동일 품목 발주 이력 <span class="badge">${sameItemPOs.length}건</span></div>
       <div class="st" style="max-height:200px"><table>
-        <thead><tr><th>일자</th><th>거래처</th><th>담당</th><th class="tr">금액</th><th>상태</th></tr></thead>
+        <thead><tr><th>일자</th><th>거래처</th><th class="tr">수량</th><th class="tr">금액</th><th>상태</th></tr></thead>
         <tbody>${sameItemPOs.filter(x=>x.vendor!=='nan').map(x=>`<tr${x===p?' style="background:rgba(59,130,246,.1)"':''}>
-          <td style="white-space:nowrap">${cleanDate(x.date_no)}</td><td>${x.vendor}</td><td>${x.manager}</td>
+          <td style="white-space:nowrap">${cleanDate(x.date_no)}</td><td>${x.vendor}</td>
+          <td class="tr">${x.qty||''}</td>
           <td class="tr">${fmtM(x.amount)}</td>
-          <td><span class="tg ${x.status==='완료'?'tg-g':x.status==='진행중'?'tg-y':'tg-r'}">${x.status}</span></td></tr>`).join('')}</tbody></table></div>
+          <td><span class="tg ${x.status==='완료'?'tg-g':x.status==='진행중'?'tg-y':'tg-r'}">${x.status||'-'}</span></td></tr>`).join('')}</tbody></table></div>
     </div>
 
     ${samePOs.length>0?`<div>
@@ -3235,18 +3260,19 @@ function renderCalDayModal(){
       ${tabs.map((t,i)=>`<div class="btn ${curTab===i?'active':''}" onclick="S.modalTab=${i};render()">${t} (${tabData[i].length})</div>`).join('')}
     </div>
     ${items.length>0?`<div class="st" style="max-height:350px"><table>
-      <thead><tr><th>구분</th><th>발주일</th><th>거래처</th><th>담당</th><th style="min-width:150px">품목</th><th>납기일</th><th class="tr">금액</th><th>상태</th></tr></thead>
+      <thead><tr><th>구분</th><th>발주일</th><th>거래처</th><th style="min-width:150px">품목</th><th class="tr">수량</th><th>납기일</th><th class="tr">금액</th><th>상태</th></tr></thead>
       <tbody>${items.map(p=>{
         const isOrd=cleanDate(p.date_no).replace(/\//g,'-')===dk;
         const isDue=cleanDate(p.due_date).replace(/\//g,'-')===dk;
         return`<tr>
           <td>${isOrd&&isDue?'<span class="tg tg-b">발주+납기</span>':isOrd?'<span class="tg tg-b">발주</span>':'<span class="tg" style="background:rgba(249,115,22,.15);color:var(--or)">납기</span>'}</td>
           <td style="white-space:nowrap">${cleanDate(p.date_no)}</td>
-          <td>${p.vendor}</td><td>${p.manager}</td>
+          <td>${p.vendor}</td>
           <td style="min-width:150px;max-width:220px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${p.item_name}</td>
+          <td class="tr">${p.qty||''}</td>
           <td style="white-space:nowrap">${cleanDate(p.due_date)}</td>
           <td class="tr">${fmtM(p.amount)}</td>
-          <td><span class="tg ${p.status==='완료'?'tg-g':p.status==='진행중'?'tg-y':'tg-r'}">${p.status}</span></td></tr>`}).join('')}</tbody></table></div>`
+          <td><span class="tg ${p.status==='완료'?'tg-g':p.status==='진행중'?'tg-y':'tg-r'}">${p.status||'-'}</span></td></tr>`}).join('')}</tbody></table></div>`
     :'<div style="color:var(--tx2);font-size:12px;padding:20px;text-align:center">해당 일자에 데이터가 없습니다.</div>'}
   </div></div>`;
 }
