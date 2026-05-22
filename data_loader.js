@@ -967,15 +967,15 @@ async function loadAllData(onProgress) {
   prog('Google Sheets 데이터 로딩 중...', 5);
   const [subulBRows, subulCRows, taRows, salesRows, purchRows, orderRows, prodRows, skuRows, plRows] =
     await Promise.all([
-      fetchSheet('subul_b',    { skipRows: 8 }),   // 수불부 원재료B: row 9부터 데이터
-      fetchSheet('subul_c',    { skipRows: 8 }),   // 수불부 제품C: row 9부터 데이터
-      fetchSheet('ta_detail',  { skipRows: 4 }),   // 타계정내역: row 5부터
-      fetchSheet('sales',      { skipRows: 2 }),   // 판매현황: row 3부터
-      fetchSheet('purchase',   { skipRows: 2 }),   // 구매현황: row 3부터
-      fetchSheet('orders',     { skipRows: 2 }),   // 발주서: row 3부터
-      fetchSheet('production', { skipRows: 2 }),   // 생산: row 3부터
-      fetchSheet('sku_master', { skipRows: 2 }),   // 품목코드: row 3부터
-      fetchSheet('pl_data',    { skipRows: 1 }),   // PL_DATA: row 2부터 (헤더 1행)
+      fetchSheet('subul_b',    { skipRows: 1 }),   // CSV→Sheet: 헤더 1행만 스킵
+      fetchSheet('subul_c',    { skipRows: 1 }),   // CSV→Sheet: 헤더 1행만 스킵
+      fetchSheet('ta_detail',  { skipRows: 1 }),   // CSV→Sheet: 헤더 1행만 스킵
+      fetchSheet('sales',      { skipRows: 1 }),   // CSV→Sheet: 헤더 1행만 스킵
+      fetchSheet('purchase',   { skipRows: 1 }),   // CSV→Sheet: 헤더 1행만 스킵
+      fetchSheet('orders',     { skipRows: 1 }),   // CSV→Sheet: 헤더 1행만 스킵
+      fetchSheet('production', { skipRows: 1 }),   // CSV→Sheet: 헤더 1행만 스킵
+      fetchSheet('sku_master', { skipRows: 1 }),   // CSV→Sheet: 헤더 1행만 스킵
+      fetchSheet('pl_data',    { skipRows: 1 }),   // PL_DATA: 헤더 1행 스킵
     ]);
   prog('데이터 로딩 완료, 파싱 중...', 30);
 
