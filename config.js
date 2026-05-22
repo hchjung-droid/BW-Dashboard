@@ -17,13 +17,13 @@ const SHEETS_CONFIG = {
   // ===== 파일별 Google Sheets ID =====
   // Google Sheets "웹에 게시" CSV endpoint 사용 (CORS 지원)
   SHEETS: {
-    subul_b:    { id: '1e-2a4OkGta56NZ2CxmqUKwWW63I4M99RUVJ7HEmKrOQ', name: '원재료B' },
-    subul_c:    { id: '1wvnn_ya8pvszZI8IeNs90tAItkT5lncMC7To0IoYpNc', name: '제품C' },
-    ta_detail:  { id: '1pxEZ8TE9ZPzmYpECNVWIkGzAXovFHIhSwPUxk5rv-ik', name: '타계정내역' },
-    sales:      { id: '1-DNEyRNc9UmVxj-9816lW03mRk3vP9IFegda8TmSDT8', name: '판매현황' },
-    purchase:   { id: '1qntio5uZeKYvn3dZpEFmSCgczarcfaMdp3M1otL5QvY', name: '구매현황' },
-    orders:     { id: '17Nf08MdF21WS1hqag70tIs6Ph5ZUUEVlMARmh_QpMys', name: '발주서' },
-    production: { id: '1fBLv3L4NSyrgJF7g_dgqhcWpBufUb9168a8sAHyWF6Q', name: '생산입고소모' },
+    subul_b:    { id: '1F7IbHocw-0LSNZ-NYQZs76cQ-t7M_sVL_LOsb7jETZo', name: '원재료B' },
+    subul_c:    { id: '1rhO4EEdnUhlx21qqx5oJXE8lp94lhOCww-Ho0VwKH8E', name: '제품C' },
+    ta_detail:  { id: '1htpbNVn5HRfoXfeXYEDyD8HsnDYJyxxsnaeNi4nR0lI', name: '타계정내역' },
+    sales:      { id: '1RvRiCMZUFw4VCIwWjhTq3v27_zySYM6iokF3Vw5tnWA', name: '판매현황' },
+    purchase:   { id: '1av1bb3PYH3vgJ9eSEH4sFumn6GD1YmlDw_V18wxukEM', name: '구매현황' },
+    orders:     { id: '1f043aCULe5AoBvlYCsvoxclTwTDFCuboq1hUxC-i9J8', name: '발주서' },
+    production: { id: '15UmZo39D-oxCXGwyRnTvX5xhWBQX9NdQrwPOAVOdmww', name: '생산입고소모' },
     sku_master: { id: '1TfDoVA2U9fMYf4DBrLYdE-AGWyRavGrdwf2UHLr5j44', name: '품목코드' },
     pl_data:    { id: '1-xAyzdvTvcIslDZTtIa_ZkLfIZHSodS5KlMmnYkoftI', name: 'PL_DATA' },
   },
