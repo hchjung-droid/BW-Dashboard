@@ -394,7 +394,9 @@ function parseSales(rows, codeMap) {
   const ta = records.map(r => ({
     date: r.date, cust: r.cust_name, shop: r.shop_name,
     sku_id: r.sku_id, name: r.name, qty: r.qty,
-    amt: r.supply_amt, total: r.total, rep: r.rep, project: r.project,
+    price: r.price,      // 단가 (per-unit, 0 if empty)
+    amt: r.supply_amt,   // 공급가액 = 단가 × 수량 (총액)
+    total: r.total, rep: r.rep, project: r.project,
   }));
 
   // --- ta_sum (월별 거래 요약) ---

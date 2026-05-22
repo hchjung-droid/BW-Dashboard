@@ -3976,7 +3976,8 @@ function renderSalesTxDetailModal(){
   +'<div class="st" style="max-height:400px"><table><thead><tr><th>일자</th><th>거래처</th><th>매장</th><th class="tr">수량</th><th class="tr">단가(공급가)</th><th class="tr">합계</th><th>담당</th><th>프로젝트</th><th>유형</th></tr></thead><tbody>'
   +sorted.map(t=>{
     const isPaid=(t.amt||0)>0;
-    return'<tr style="'+(isPaid?'':'background:rgba(234,179,8,.06)')+'"><td style="white-space:nowrap">'+(t.date||'-')+'</td><td>'+(t.cust||'-')+'</td><td>'+(t.shop||'-')+'</td><td class="tr">'+(t.qty||0)+'</td><td class="tr">'+(isPaid?fmt(t.amt):'0')+'</td><td class="tr" style="font-weight:600">'+(isPaid?fmtM(t.amt*(t.qty||1)):'-')+'</td><td>'+(t.rep||'-')+'</td><td style="font-size:10px">'+(t.project||'-')+'</td><td><span class="tg '+(isPaid?'tg-b':'tg-y')+'">'+(isPaid?'일시불':'구독/렌탈')+'</span></td></tr>'
+    const unitPrice=isPaid?(t.price||((t.qty||1)>0?Math.round((t.amt||0)/(t.qty||1)):0)):0;
+    return'<tr style="'+(isPaid?'':'background:rgba(234,179,8,.06)')+'"><td style="white-space:nowrap">'+(t.date||'-')+'</td><td>'+(t.cust||'-')+'</td><td>'+(t.shop||'-')+'</td><td class="tr">'+(t.qty||0)+'</td><td class="tr">'+(isPaid?fmt(unitPrice):'0')+'</td><td class="tr" style="font-weight:600">'+(isPaid?fmtM(t.amt):'-')+'</td><td>'+(t.rep||'-')+'</td><td style="font-size:10px">'+(t.project||'-')+'</td><td><span class="tg '+(isPaid?'tg-b':'tg-y')+'">'+(isPaid?'일시불':'구독/렌탈')+'</span></td></tr>'
   }).join('')
   +'</tbody></table></div>'
   +'<div style="font-size:10px;color:var(--tx2);margin-top:4px">* 모든 금액은 <strong>공급가(부가세 제외)</strong> 기준</div>'
