@@ -779,7 +779,7 @@ function pgDash(){
   ${noDataNotice()}
   <div class="kr">
     <div class="kc" style="cursor:pointer" onclick="scrollToDash('dash-asset')"><div class="lb">${endQtyLabel}</div><div class="vl c-bl">${fmt(endQty)}개</div><div class="sb">${mLabel}</div></div>
-    <div class="kc" style="cursor:pointer" onclick="scrollToDash('dash-asset')"><div class="lb">재고 자산</div><div class="vl">${fmtM(endAmt)}</div><div class="sb">${mLabel}</div></div>
+    <div class="kc" style="cursor:pointer" onclick="scrollToDash('dash-asset')"><div class="lb">재고 자산</div><div class="vl${endAmt>0?'':' c-rd'}">${endAmt>0?fmtM(endAmt):'0.00M ⚠️'}</div><div class="sb">${endAmt>0?mLabel:'콘솔(F12) 확인'}</div></div>
     <div class="kc"><div class="lb">입고 수량</div><div class="vl c-gn">${fmt(pIn)}개</div><div class="sb">${mLabel}</div></div>
     <div class="kc"><div class="lb">출고(정상)</div><div class="vl c-pp">${fmt(pOut)}개</div><div class="sb">${mLabel}</div></div>
     <div class="kc" style="cursor:pointer" onclick="scrollToDash('dash-low')"><div class="lb">재고부족</div><div class="vl ${(cntLow2+cntNoStock2)>5?'c-rd':'c-yl'}">${cntLow2+cntNoStock2}건</div><div class="sb">부족 ${cntLow2} + 재고없음 ${cntNoStock2}</div></div>

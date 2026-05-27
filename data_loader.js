@@ -157,6 +157,11 @@ function parseSubulB(rows, codeMap) {
   const OFS = SHEETS_CONFIG.SUBUL_DATA_OFFSET;
   const items = {}; // { monthKey: { sku: {...} } }
 
+  // ─── 컬럼 수 진단 ───
+  let colCountLogged = false;
+  let oldFormatWarned = false;
+  let eaSum = 0, eaFallbackCnt = 0;
+
   for (const row of rows) {
     const monthKey = _s(row[SHEETS_CONFIG.SUBUL_MONTH_COL]);
     if (!monthKey || !/^\d{4}-\d{2}$/.test(monthKey)) continue;
@@ -165,6 +170,26 @@ function parseSubulB(rows, codeMap) {
     sku = mapCode(sku, codeMap);
     const name = _s(row[OFS + 1]);
 
+    if (!colCountLogged) {
+      console.log(`[parseSubulB] 첫 데이터 행 컬럼수: ${row.length} (기대: 20+ for 기말금액)`);
+      if (row.length < OFS + 19) {
+        console.warn(`[parseSubulB] ⚠️ 컬럼 부족! row.length=${row.length}, 기말금액(OFS+18=${OFS+18}) 누락 가능. 구 CSV 포맷 감지 → ea=eq×unitCost 역산 적용`);
+        oldFormatWarned = true;
+      }
+      colCountLogged = true;
+    }
+
+    const eq = _ni(row[OFS + 16]);
+    const unitCost = _n(row[OFS + 17]);
+
+    // 기말금액: row[OFS+18] 직접 읽기 → 없거나 0이면 eq×unitCost 역산
+    let ea = _n(row[OFS + 18]);
+    if (ea === 0 && eq > 0 && unitCost > 0) {
+      ea = Math.round(eq * unitCost);
+      eaFallbackCnt++;
+    }
+    eaSum += ea;
+
     if (!items[monthKey]) items[monthKey] = {};
     items[monthKey][sku] = {
       name, itemType: '원재료',
@@ -172,9 +197,13 @@ function parseSubulB(rows, codeMap) {
       iq: _ni(row[OFS + 6]),  ia: _n(row[OFS + 8]),
       on: _ni(row[OFS + 9]),  ot: _ni(row[OFS + 10]),
       oq: _ni(row[OFS + 11]), oa: _n(row[OFS + 15]),
-      eq: _ni(row[OFS + 16]), unitCost: _n(row[OFS + 17]),
-      ea: _n(row[OFS + 18]),
+      eq, unitCost, ea,
     };
+  }
+
+  console.log(`[parseSubulB] 파싱 완료: ${Object.keys(items).length}개월, ea합계=${eaSum.toLocaleString()}${eaFallbackCnt > 0 ? `, ea역산=${eaFallbackCnt}건 (구 포맷 보정)` : ''}`);
+  if (oldFormatWarned) {
+    console.warn('[parseSubulB] 💡 새 CSV(24열) 업로드 권장: sheets_csv/01_원재료B.csv → Google Sheets');
   }
   return items;
 }
@@ -216,16 +245,21 @@ function parseSubulC(rows, codeMap) {
     }
 
     if (!items[monthKey]) items[monthKey] = {};
+    const eq = _ni(row[OFS + 33]);
+    const unitCost = _n(row[OFS + 34]);
+    let ea = _n(row[OFS + 35]);
+    if (ea === 0 && eq > 0 && unitCost > 0) ea = Math.round(eq * unitCost);
+
     items[monthKey][sku] = {
       name, itemType: '제품',
       bq: _ni(row[OFS + 3]),
       iq: _ni(row[OFS + 6]),  ia: _n(row[OFS + 25]),
       on: _ni(row[OFS + 26]), ot: _ni(row[OFS + 27]),
       oq: _ni(row[OFS + 28]), oa: _n(row[OFS + 32]),
-      eq: _ni(row[OFS + 33]), unitCost: _n(row[OFS + 34]),
-      ea: _n(row[OFS + 35]),
+      eq, unitCost, ea,
     };
   }
+  console.log(`[parseSubulC] 파싱 완료: ${Object.keys(items).length}개월, BOM ${Object.keys(bomMap).length}건`);
   return { items, bomMap };
 }
 
