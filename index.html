@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>BeaverWorks 통합관리 v12.0 (Web)</title>
+<title>BeaverWorks 통합관리 v12.1 (Web)</title>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/xlsx-js-style@1.2.0/dist/xlsx.bundle.js"></script>
 <style>
@@ -638,18 +638,19 @@ function sidebar(){
     {id:'sales',ic:'💰',lb:'판매 분석'},
     {id:'bom',ic:'🔧',lb:'BOM 관리'},
     {id:'cost',ic:'💹',lb:'원가 분석'},
+    {id:'logic_ref',ic:'📐',lb:'수치산정 로직'},
     {id:'settings',ic:'⚙️',lb:'시스템 설정'},
   ];
   // MOQ alert count
-  const lastMk=S.selYear==='2026'?'2026-03':'2025-12';
+  const lastMk=S.selYear==='2026'?M26_DATA[M26_DATA.length-1]:'2025-12';
   const alertCnt=S.cfg.moqAlert?D.inv.filter(i=>{
     const ss=calcSS(i.sku_id);const eq=mio[i.sku_id]&&mio[i.sku_id][lastMk]?mio[i.sku_id][lastMk].eq:i.qty;
     return eq<=ss&&ss>0;
   }).length:0;
-  return`<nav class="sidebar" role="navigation" aria-label="메인 내비게이션"><div class="sidebar-hdr"><h1>BeaverWorks</h1><p>통합관리 v12.0 (Web)</p></div>
+  return`<nav class="sidebar" role="navigation" aria-label="메인 내비게이션"><div class="sidebar-hdr"><h1>BeaverWorks</h1><p>통합관리 v12.1 (Web)</p></div>
   <div class="nav">${items.map(i=>`<div class="ni ${S.pg===i.id?'active':''}" data-pg="${i.id}" role="button" tabindex="0"${S.pg===i.id?' aria-current="page"':''}><span class="ic" aria-hidden="true">${i.ic}</span><span>${i.lb}</span>${i.id==='inventory'&&alertCnt>0?`<span style="margin-left:auto;background:var(--rd);color:#fff;border-radius:8px;padding:1px 6px;font-size:9px" aria-label="부족 ${alertCnt}건">${alertCnt}</span>`:''}</div>`).join('')}</div>
   <div style="padding:10px;border-top:1px solid var(--bd);font-size:10px;color:var(--tx2)">기준일: ${(()=>{
-    if(S.selMonth==='all'){return S.selYear==='2025'?'2025-12-31':'2026-03-31'}
+    if(S.selMonth==='all'){const lm26=M26_DATA[M26_DATA.length-1];const ld=new Date(lm26+'-01');ld.setMonth(ld.getMonth()+1);ld.setDate(0);return S.selYear==='2025'?'2025-12-31':lm26+'-'+String(ld.getDate()).padStart(2,'0')}
     if(S.selMonth.startsWith('Q')){const qm=getQuarterMonths(S.selMonth,S.selYear);const lm=qm[qm.length-1];const d=new Date(lm+'-01');d.setMonth(d.getMonth()+1);d.setDate(0);return lm+'-'+String(d.getDate()).padStart(2,'0')}
     const mk=S.selYear+'-'+S.selMonth;const d2=new Date(mk+'-01');d2.setMonth(d2.getMonth()+1);d2.setDate(0);return mk+'-'+String(d2.getDate()).padStart(2,'0')
   })()}<br>안전재고: 당월포함 최근 ${getSSRefMonths().length}개월 평균×${S.cfg.ssMonths}<br>단위: M (백만원)</div></nav>`;
@@ -668,6 +669,7 @@ function page(){
     case'forecast':return pgFcast();
     case'other_acct':return pgOtherAcct();
     case'cost':return pgCost();
+    case'logic_ref':return pgLogicRef();
     case'settings':return pgSet();
   }
 }
@@ -718,12 +720,12 @@ function pgDash(){
 
   let endQtyLabel, endQty=0, endAmt=0;
   const lastMk=(()=>{
-    if(S.selMonth==='all') return yr==='2025'?'2025-12':'2026-03';
+    if(S.selMonth==='all') return yr==='2025'?'2025-12':M26_DATA[M26_DATA.length-1];
     if(S.selMonth.startsWith('Q')){const qm=getQuarterMonths(S.selMonth,yr);return qm[qm.length-1]}
     return yr+'-'+S.selMonth;
   })();
   if(S.selMonth==='all'){
-    endQtyLabel=yr==='2025'?'기말재고(25.12)':'기말재고(26.03)';
+    endQtyLabel=yr==='2025'?'기말재고(25.12)':`기말재고(${M26_DATA[M26_DATA.length-1].slice(2).replace('-','.')})`;
   } else if(S.selMonth.startsWith('Q')){
     endQtyLabel=`기말재고(${S.selMonth})`;
   } else {
@@ -4167,7 +4169,7 @@ function renderCharts(){
       let wfIn=0,wfOut=0,wfOther=0,wfInA=0,wfOutA=0;
       const selMs=getSelectedMonths();
       Object.values(mio).forEach(skuD=>{selMs.forEach(m=>{const d=skuD[m];if(d){wfIn+=d.iq||0;wfOut+=d.on||0;wfOther+=d.ot||0;wfInA+=d.ia||0;wfOutA+=d.oa||0}})});
-      const lastMk2=(()=>{if(S.selMonth==='all')return yr==='2025'?'2025-12':'2026-03';if(S.selMonth.startsWith('Q')){const qm=getQuarterMonths(S.selMonth,yr);return qm[qm.length-1]}return yr+'-'+S.selMonth})();
+      const lastMk2=(()=>{if(S.selMonth==='all')return yr==='2025'?'2025-12':M26_DATA[M26_DATA.length-1];if(S.selMonth.startsWith('Q')){const qm=getQuarterMonths(S.selMonth,yr);return qm[qm.length-1]}return yr+'-'+S.selMonth})();
       let endQ=0,endA=0;Object.values(mio).forEach(d=>{if(d[lastMk2]){endQ+=d[lastMk2].eq||0;endA+=d[lastMk2].ea||0}});
       const allMsF=[...M25,...M26];const li=allMsF.indexOf(lastMk2);const prevMk2=li>0?allMsF[li-1]:null;
       let beginQ=0,beginA=0;if(prevMk2){Object.values(mio).forEach(d=>{if(d[prevMk2]){beginQ+=d[prevMk2].eq||0;beginA+=d[prevMk2].ea||0}})}else{beginQ=endQ-wfIn+wfOut+wfOther;beginA=endA-wfInA+wfOutA}
@@ -4212,7 +4214,7 @@ function renderCharts(){
     if(cHL){
       const totalAct=D.inv.filter(i=>i.qty!==0||i.amount!==0).length;
       let nNormal=0,nLow=0,nNoStock=0,nExcess=0,nNoDem=0;
-      const lmk=(()=>{if(S.selMonth==='all')return yr==='2025'?'2025-12':'2026-03';if(S.selMonth.startsWith('Q')){const qm=getQuarterMonths(S.selMonth,yr);return qm[qm.length-1]}return yr+'-'+S.selMonth})();
+      const lmk=(()=>{if(S.selMonth==='all')return yr==='2025'?'2025-12':M26_DATA[M26_DATA.length-1];if(S.selMonth.startsWith('Q')){const qm=getQuarterMonths(S.selMonth,yr);return qm[qm.length-1]}return yr+'-'+S.selMonth})();
       D.inv.filter(i=>i.qty!==0||i.amount!==0).forEach(i=>{
         const ss=calcSS(i.sku_id);const eq=mio[i.sku_id]&&mio[i.sku_id][lmk]?mio[i.sku_id][lmk].eq:i.qty;
         const ratio=ss>0?eq/ss:999;
@@ -5136,6 +5138,248 @@ const barLabelPlugin={id:'barLabels',afterDatasetsDraw(chart){
   ctx.restore();
 }};
 Chart.register(barLabelPlugin);
+
+// ═══════════════ 수치산정 로직 ═══════════════
+function pgLogicRef(){
+  const lastMk=(()=>{
+    if(S.selMonth==='all') return S.selYear==='2025'?'2025-12':M26_DATA[M26_DATA.length-1];
+    if(S.selMonth.startsWith('Q')){const qm=getQuarterMonths(S.selMonth,S.selYear);return qm[qm.length-1]}
+    return S.selYear+'-'+S.selMonth;
+  })();
+  const selMs=getSelectedMonths();
+
+  // 실시간 검증값 계산
+  let vIq=0,vOn=0,vOt=0,vOq=0,vIa=0,vOa=0,vEq=0,vEa=0,vBq=0,vBa=0;
+  let vIqB=0,vOnB=0,vOtB=0,vOqB=0,vEqB=0,vEaB=0,vBqB=0;
+  let vIqC=0,vOnC=0,vOtC=0,vOqC=0,vEqC=0,vEaC=0,vBqC=0;
+  const allMsFull=[...M25,...M26];
+  const lastIdx=allMsFull.indexOf(lastMk);
+  const prevMk=lastIdx>0?allMsFull[lastIdx-1]:null;
+  Object.entries(mio).forEach(([sku,skuData])=>{
+    const isB=sku.startsWith('B-'),isC=sku.startsWith('C-');
+    selMs.forEach(m=>{const d=skuData[m];if(d){
+      vIq+=d.iq||0; vOn+=d.on||0; vOt+=d.ot||0; vOq+=d.oq||0;
+      vIa+=d.ia||0; vOa+=d.oa||0;
+      if(isB){vIqB+=d.iq||0;vOnB+=d.on||0;vOtB+=d.ot||0;vOqB+=d.oq||0;}
+      if(isC){vIqC+=d.iq||0;vOnC+=d.on||0;vOtC+=d.ot||0;vOqC+=d.oq||0;}
+    }});
+    if(skuData[lastMk]){
+      vEq+=skuData[lastMk].eq||0; vEa+=skuData[lastMk].ea||0;
+      if(isB){vEqB+=skuData[lastMk].eq||0;vEaB+=skuData[lastMk].ea||0;}
+      if(isC){vEqC+=skuData[lastMk].eq||0;vEaC+=skuData[lastMk].ea||0;}
+    }
+    if(prevMk&&skuData[prevMk]){
+      vBq+=skuData[prevMk].eq||0; vBa+=skuData[prevMk].ea||0;
+      if(isB) vBqB+=skuData[prevMk].eq||0;
+      if(isC) vBqC+=skuData[prevMk].eq||0;
+    }
+  });
+
+  // 판매 집계
+  let salesAmt=0,salesQty=0;
+  (D.sales_tx||[]).forEach(t=>{
+    const tm=_dateToMonth(t.date);
+    if(selMs.includes(tm)){salesAmt+=t.amt||0;salesQty+=t.qty||0;}
+  });
+
+  // 안전재고 로직 요약
+  const ssRefMs=getSSRefMonths();
+  const ssSample=D.inv.filter(i=>i.sku_id.startsWith('B-')).slice(0,1)[0];
+  const ssSampleSku=ssSample?ssSample.sku_id:'(없음)';
+  const ssSampleVal=ssSample?calcSS(ssSample.sku_id):0;
+
+  const secStyle='background:var(--sf);border:1px solid var(--bd);border-radius:8px;padding:16px;margin-bottom:16px';
+  const thStyle='background:var(--bg2);text-align:left;padding:8px 12px;font-size:12px;font-weight:600;border-bottom:2px solid var(--bd)';
+  const tdStyle='padding:6px 12px;font-size:12px;border-bottom:1px solid var(--bd)';
+  const codeStyle='background:var(--bg2);padding:2px 6px;border-radius:4px;font-family:monospace;font-size:11px';
+  const hlStyle='color:var(--ac);font-weight:600';
+  const numStyle='font-family:monospace;font-weight:600';
+
+  function section(title,icon,content){return `<div style="${secStyle}"><h3 style="font-size:15px;margin:0 0 12px 0">${icon} ${title}</h3>${content}</div>`}
+
+  function dataRow(label,formula,srcCol,liveVal,note=''){
+    return `<tr><td style="${tdStyle};font-weight:600;white-space:nowrap">${label}</td>
+    <td style="${tdStyle}"><code style="${codeStyle}">${formula}</code></td>
+    <td style="${tdStyle};font-size:11px;color:var(--tx2)">${srcCol}</td>
+    <td style="${tdStyle};text-align:right;${numStyle}">${liveVal}</td>
+    <td style="${tdStyle};font-size:11px;color:var(--tx2)">${note}</td></tr>`}
+
+  function tblHead(cols){return `<table style="width:100%;border-collapse:collapse"><thead><tr>${cols.map(c=>`<th style="${thStyle}">${c}</th>`).join('')}</tr></thead><tbody>`}
+
+  // ─── Section 1: 데이터 소스 ───
+  const srcHtml=section('데이터 소스 매핑','🗄️',`
+    <p style="font-size:12px;color:var(--tx2);margin:0 0 12px 0">Google Sheets CSV → data_loader.js → D (RAW_DATA) 객체</p>
+    ${tblHead(['시트명','키','설명','레코드 수'])}
+    <tr><td style="${tdStyle}">원재료B (subul_b)</td><td style="${tdStyle}"><code style="${codeStyle}">D.mio[B-*]</code></td><td style="${tdStyle}">원재료 수불부 (월별 입출고)</td><td style="${tdStyle}" class="tr">${Object.keys(mio).filter(k=>k.startsWith('B-')).length} SKU</td></tr>
+    <tr><td style="${tdStyle}">제품C (subul_c)</td><td style="${tdStyle}"><code style="${codeStyle}">D.mio[C-*]</code></td><td style="${tdStyle}">완제품 수불부 (조립출하)</td><td style="${tdStyle}" class="tr">${Object.keys(mio).filter(k=>k.startsWith('C-')).length} SKU</td></tr>
+    <tr><td style="${tdStyle}">판매현황 (sales)</td><td style="${tdStyle}"><code style="${codeStyle}">D.sales_tx, D.isd</code></td><td style="${tdStyle}">거래명세서, 품목별판매현황</td><td style="${tdStyle}" class="tr">${(D.sales_tx||[]).length}건 / ${(D.isd||[]).length} SKU</td></tr>
+    <tr><td style="${tdStyle}">구매현황 (purchase)</td><td style="${tdStyle}"><code style="${codeStyle}">D.po</code></td><td style="${tdStyle}">구매/발주 이력</td><td style="${tdStyle}" class="tr">${(D.po||[]).length}건</td></tr>
+    <tr><td style="${tdStyle}">생산입고소모 (production)</td><td style="${tdStyle}"><code style="${codeStyle}">D.bom_demand</code></td><td style="${tdStyle}">BOM 소비 실적</td><td style="${tdStyle}" class="tr">${(D.bom_demand||[]).length}건</td></tr>
+    <tr><td style="${tdStyle}">품목코드 (sku_master)</td><td style="${tdStyle}"><code style="${codeStyle}">D.sku</code></td><td style="${tdStyle}">품목 마스터</td><td style="${tdStyle}" class="tr">${(D.sku||[]).length}건</td></tr>
+    <tr><td style="${tdStyle}">타계정내역 (ta_detail)</td><td style="${tdStyle}"><code style="${codeStyle}">D.ta</code></td><td style="${tdStyle}">타계정 거래 상세</td><td style="${tdStyle}" class="tr">${(D.ta||[]).length}건</td></tr>
+    </tbody></table>
+  `);
+
+  // ─── Section 2: 수불부 컬럼 매핑 ───
+  const colHtml=section('수불부 컬럼 매핑 (CSV → JS)','📋',`
+    <p style="font-size:12px;color:var(--tx2);margin:0 0 8px 0">OFS = SUBUL_DATA_OFFSET = 1 (A열=월, 이후 Excel 컬럼)</p>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
+    <div>
+      <h4 style="font-size:13px;margin:0 0 8px 0">원재료B (parseSubulB)</h4>
+      ${tblHead(['필드','Excel col','CSV idx','설명'])}
+      ${[['sku','0','OFS+0=1','품목코드'],['name','1','OFS+1=2','품목명'],['bq','3','OFS+3=4','기초수량'],
+         ['iq','6','OFS+6=7','입고수량'],['ia','8','OFS+8=9','입고금액'],
+         ['on','9','OFS+9=10','정상출고'],['ot','10','OFS+10=11','타계정출고'],
+         ['oq','11','OFS+11=12','출고계'],['oa','15','OFS+15=16','출고금액계'],
+         ['eq','16','OFS+16=17','기말수량'],['unitCost','17','OFS+17=18','기말단가'],
+         ['ea','18','OFS+18=19','기말금액']
+      ].map(r=>`<tr><td style="${tdStyle}"><code style="${codeStyle}">${r[0]}</code></td><td style="${tdStyle}">${r[1]}</td><td style="${tdStyle}">${r[2]}</td><td style="${tdStyle}">${r[3]}</td></tr>`).join('')}
+      </tbody></table>
+    </div>
+    <div>
+      <h4 style="font-size:13px;margin:0 0 8px 0">제품C (parseSubulC)</h4>
+      ${tblHead(['필드','Excel col','CSV idx','설명'])}
+      ${[['sku','0','OFS+0=1','품목코드'],['name','1','OFS+1=2','품목명'],['bq','3','OFS+3=4','기초수량'],
+         ['iq','6','OFS+6=7','입고수량(=조립)'],['BOM','7~21','OFS+7~21','BOM 5세트(코드,단가,수량)'],
+         ['ia','25','OFS+25=26','입고금액'],
+         ['on','26','OFS+26=27','정상출고(=판매)'],['ot','27','OFS+27=28','타계정출고'],
+         ['oq','28','OFS+28=29','출고계'],['oa','32','OFS+32=33','출고금액'],
+         ['eq','33','OFS+33=34','기말수량'],['unitCost','34','OFS+34=35','기말단가'],
+         ['ea','35','OFS+35=36','기말금액']
+      ].map(r=>`<tr><td style="${tdStyle}"><code style="${codeStyle}">${r[0]}</code></td><td style="${tdStyle}">${r[1]}</td><td style="${tdStyle}">${r[2]}</td><td style="${tdStyle}">${r[3]}</td></tr>`).join('')}
+      </tbody></table>
+    </div></div>
+  `);
+
+  // ─── Section 3: KPI 산정 로직 ───
+  const kpiHtml=section('KPI 카드 산정 로직','🎯',`
+    <p style="font-size:12px;color:var(--tx2);margin:0 0 8px 0">기간: ${periodLabel()} | 기준월: ${lastMk} | 전월: ${prevMk||'(없음)'}</p>
+    ${tblHead(['KPI','산정 공식','데이터 소스','현재값','비고'])}
+    ${dataRow('기말재고(수량)','Σ mio[*][lastMk].eq','수불부 B+C 기말수량',fmt(vEq)+'개','C-제품은 항상 0 (조립출하)')}
+    ${dataRow('재고자산(금액)','Σ mio[*][lastMk].ea','수불부 B+C 기말금액',fmtM(vEa),'원재료B만 실질 금액 존재')}
+    ${dataRow('입고 수량','Σ mio[*][selMs].iq','수불부 입고수량 합',fmt(vIq)+'개','B=구매입고, C=조립입고')}
+    ${dataRow('출고(정상)','Σ mio[*][selMs].on','수불부 정상출고 합',fmt(vOn)+'개','B=생산투입, C=판매출고')}
+    ${dataRow('타계정','Σ mio[*][selMs].ot','수불부 타계정출고 합',fmt(vOt)+'개','무상제공, 샘플 등')}
+    ${dataRow('기초재고','Σ mio[*][prevMk].eq','전월 기말수량',fmt(vBq)+'개','prevMk 없으면 역산')}
+    ${dataRow('판매금액','Σ sales_tx[selMs].amt','판매현황 공급가액 합',fmtM(salesAmt),'amt=단가×수량 (총액)')}
+    ${dataRow('판매수량','Σ sales_tx[selMs].qty','판매현황 수량 합',fmt(salesQty)+'개','')}
+    </tbody></table>
+    <div style="margin-top:12px;padding:10px;background:var(--bg2);border-radius:6px;font-size:12px">
+      <b>워터풀 수식 검증 (수량):</b> 기초(${fmt(vBq)}) + 입고(${fmt(vIq)}) − 출고계(${fmt(vOq)}) = <span style="${hlStyle}">${fmt(vBq+vIq-vOq)}</span> vs 기말 <span style="${hlStyle}">${fmt(vEq)}</span>
+      ${Math.abs(vBq+vIq-vOq-vEq)<2?'<span style="color:var(--gn);margin-left:8px">✅ 정합</span>':'<span style="color:var(--rd);margin-left:8px">⚠️ 차이 '+fmt(Math.abs(vBq+vIq-vOq-vEq))+'</span>'}
+    </div>
+  `);
+
+  // ─── Section 4: B/C 구분 상세 ───
+  const bcHtml=section('원재료(B) vs 제품(C) 구분','🔀',`
+    ${tblHead(['구분','입고(iq)','정상출고(on)','타계정(ot)','출고계(oq)','기말수량(eq)','기말금액(ea)'])}
+    <tr><td style="${tdStyle};font-weight:600">원재료(B-)</td>
+      <td style="${tdStyle}" class="tr">${fmt(vIqB)}</td><td style="${tdStyle}" class="tr">${fmt(vOnB)}</td>
+      <td style="${tdStyle}" class="tr">${fmt(vOtB)}</td><td style="${tdStyle}" class="tr">${fmt(vOqB)}</td>
+      <td style="${tdStyle}" class="tr">${fmt(vEqB)}</td><td style="${tdStyle}" class="tr">${fmtM(vEaB)}</td></tr>
+    <tr><td style="${tdStyle};font-weight:600">제품(C-)</td>
+      <td style="${tdStyle}" class="tr">${fmt(vIqC)}</td><td style="${tdStyle}" class="tr">${fmt(vOnC)}</td>
+      <td style="${tdStyle}" class="tr">${fmt(vOtC)}</td><td style="${tdStyle}" class="tr">${fmt(vOqC)}</td>
+      <td style="${tdStyle}" class="tr">${fmt(vEqC)}</td><td style="${tdStyle}" class="tr">${fmtM(vEaC)}</td></tr>
+    <tr style="font-weight:700;background:var(--bg2)"><td style="${tdStyle}">합계</td>
+      <td style="${tdStyle}" class="tr">${fmt(vIq)}</td><td style="${tdStyle}" class="tr">${fmt(vOn)}</td>
+      <td style="${tdStyle}" class="tr">${fmt(vOt)}</td><td style="${tdStyle}" class="tr">${fmt(vOq)}</td>
+      <td style="${tdStyle}" class="tr">${fmt(vEq)}</td><td style="${tdStyle}" class="tr">${fmtM(vEa)}</td></tr>
+    </tbody></table>
+    <div style="margin-top:10px;font-size:11px;color:var(--tx2)">
+      <b>참고:</b> C-제품은 조립출하 방식이므로 기말재고(eq)와 기말금액(ea)이 항상 0입니다.<br>
+      B-원재료의 입고 = 외부 구매입고 | C-제품의 입고 = 자재 조립 완성 (내부 입고)<br>
+      B-원재료의 정상출고(on) = 생산투입 (BOM 소비) | C-제품의 정상출고(on) = 판매 출하
+    </div>
+  `);
+
+  // ─── Section 5: 안전재고 ───
+  const ssHtml=section('안전재고 산정','🛡️',`
+    ${tblHead(['항목','내용'])}
+    <tr><td style="${tdStyle};font-weight:600">공식</td><td style="${tdStyle}"><code style="${codeStyle}">안전재고 = (최근 N개월 평균 출고수량) × 승수</code></td></tr>
+    <tr><td style="${tdStyle};font-weight:600">참조 기간</td><td style="${tdStyle}">당월 포함 최근 <b>${ssRefMs.length}개월</b> (${ssRefMs[0]||'-'} ~ ${ssRefMs[ssRefMs.length-1]||'-'})</td></tr>
+    <tr><td style="${tdStyle};font-weight:600">승수</td><td style="${tdStyle}"><b>${S.cfg.ssMonths}</b> (시스템 설정에서 변경 가능)</td></tr>
+    <tr><td style="${tdStyle};font-weight:600">출고 기준</td><td style="${tdStyle}"><code style="${codeStyle}">mio[sku][m].on</code> (정상출고, 타계정 제외)</td></tr>
+    <tr><td style="${tdStyle};font-weight:600">적용 대상</td><td style="${tdStyle}">B- 원재료만 (C- 제품은 BOM 생산가능 수로 관리)</td></tr>
+    <tr><td style="${tdStyle};font-weight:600">예시</td><td style="${tdStyle}">${ssSampleSku}: calcSS = <b>${fmt(ssSampleVal)}</b>개</td></tr>
+    </tbody></table>
+  `);
+
+  // ─── Section 6: 원가율 ───
+  const costHtml=section('원가율 산정','💹',`
+    ${tblHead(['항목','내용'])}
+    <tr><td style="${tdStyle};font-weight:600">공식</td><td style="${tdStyle}"><code style="${codeStyle}">원가율(%) = (BOM 원가 합계 / 판매단가) × 100</code></td></tr>
+    <tr><td style="${tdStyle};font-weight:600">BOM 원가</td><td style="${tdStyle}"><code style="${codeStyle}">Σ (child.price × child.qty)</code> — BOM 자재별 (단가 × 소요량)</td></tr>
+    <tr><td style="${tdStyle};font-weight:600">판매단가</td><td style="${tdStyle}"><code style="${codeStyle}">Σ sales_tx.amt / Σ sales_tx.qty</code> — 전체 기간 평균</td></tr>
+    <tr><td style="${tdStyle};font-weight:600">등급 기준</td><td style="${tdStyle}">
+      <span style="color:#dc2626">🔴 위험 90%↑</span> &nbsp;
+      <span style="color:#ca8a04">🟡 주의 70~90%</span> &nbsp;
+      <span style="color:#15803d">🟢 양호 50~70%</span> &nbsp;
+      <span style="color:#2563eb">🔵 고마진 ~50%</span>
+    </td></tr>
+    </tbody></table>
+  `);
+
+  // ─── Section 7: 판매 데이터 ───
+  const salesHtml=section('판매 데이터 처리','💰',`
+    ${tblHead(['필드','CSV 컬럼','설명','주의사항'])}
+    <tr><td style="${tdStyle}"><code style="${codeStyle}">date</code></td><td style="${tdStyle}">col 0 (일자-No)</td><td style="${tdStyle}">거래일</td><td style="${tdStyle}">YYYY/MM/DD 형식</td></tr>
+    <tr><td style="${tdStyle}"><code style="${codeStyle}">qty</code></td><td style="${tdStyle}">col 8</td><td style="${tdStyle}">수량</td><td style="${tdStyle}">마이너스=반품</td></tr>
+    <tr><td style="${tdStyle}"><code style="${codeStyle}">price</code></td><td style="${tdStyle}">col 9</td><td style="${tdStyle}">단가 (개당)</td><td style="${tdStyle}">비어있을 수 있음</td></tr>
+    <tr><td style="${tdStyle}"><code style="${codeStyle}">supply_amt</code></td><td style="${tdStyle}">col 10</td><td style="${tdStyle}">공급가액 = 단가×수량</td><td style="${tdStyle};color:var(--rd);font-weight:600">이미 총액! 이중계산 주의</td></tr>
+    <tr><td style="${tdStyle}"><code style="${codeStyle}">vat</code></td><td style="${tdStyle}">col 11</td><td style="${tdStyle}">VAT</td><td style="${tdStyle}"></td></tr>
+    <tr><td style="${tdStyle}"><code style="${codeStyle}">total</code></td><td style="${tdStyle}">col 12</td><td style="${tdStyle}">합계 (공급가+VAT)</td><td style="${tdStyle}"></td></tr>
+    </tbody></table>
+    <div style="margin-top:10px;padding:10px;background:var(--bg2);border-radius:6px;font-size:12px">
+      <b>⚠️ 핵심:</b> <code style="${codeStyle}">supply_amt</code>(공급가액)는 <b>단가 × 수량</b>의 합산 결과입니다.<br>
+      모달에서 단가를 표시하려면: <code style="${codeStyle}">unitPrice = price || (amt / qty)</code><br>
+      합계를 표시하려면: <code style="${codeStyle}">total = amt</code> (그대로 사용, qty를 다시 곱하면 이중계산)
+    </div>
+  `);
+
+  // ─── Section 8: BOM 소비 ───
+  const bomHtml=section('BOM 소비량 계산','🔧',`
+    ${tblHead(['항목','내용'])}
+    <tr><td style="${tdStyle};font-weight:600">공식</td><td style="${tdStyle}"><code style="${codeStyle}">salesQty = max(isd.qty, mio.oq - mio.ot)</code><br><code style="${codeStyle}">consumption = salesQty × bom.qty</code></td></tr>
+    <tr><td style="${tdStyle};font-weight:600">이유</td><td style="${tdStyle}">sales_tx에 구독렌탈 거래가 누락될 수 있고, isd에도 일부 빠질 수 있음.<br>mio.oq-mio.ot(순수출고)가 가장 정확 → max()로 보정</td></tr>
+    <tr><td style="${tdStyle};font-weight:600">대상</td><td style="${tdStyle}">parent = C-완제품, child = B-원재료</td></tr>
+    <tr><td style="${tdStyle};font-weight:600">BOM 데이터</td><td style="${tdStyle}">${(D.bom||[]).length}개 관계 등록</td></tr>
+    </tbody></table>
+  `);
+
+  // ─── Section 9: 데이터 기간 ───
+  const periodHtml=section('데이터 보유 기간','📅',`
+    ${tblHead(['연도','보유 월','비고'])}
+    <tr><td style="${tdStyle}">2025</td><td style="${tdStyle}">${M25.filter(m=>hasData(m)).join(', ')||'(없음)'}</td><td style="${tdStyle}">${M25.filter(m=>hasData(m)).length}개월</td></tr>
+    <tr><td style="${tdStyle}">2026</td><td style="${tdStyle}">${M26_DATA.join(', ')}</td><td style="${tdStyle}">${M26_DATA.length}개월</td></tr>
+    </tbody></table>
+    <div style="margin-top:8px;font-size:11px;color:var(--tx2)">
+      lastMk(전체 선택 시 기준월): <b>${M26_DATA[M26_DATA.length-1]}</b> |
+      selMonth: <b>${S.selMonth}</b> | selYear: <b>${S.selYear}</b>
+    </div>
+  `);
+
+  return `<div style="max-width:1200px;margin:0 auto">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px">
+      <h2 style="font-size:18px;margin:0">📐 수치산정 로직 레퍼런스</h2>
+      <span style="font-size:11px;color:var(--tx2)">선택 기간: ${periodLabel()} | 기준월: ${lastMk}</span>
+    </div>
+    ${periodHtml}
+    ${srcHtml}
+    ${kpiHtml}
+    ${bcHtml}
+    ${colHtml}
+    ${salesHtml}
+    ${ssHtml}
+    ${costHtml}
+    ${bomHtml}
+  </div>`;
+}
+
+function _dateToMonth(d){
+  if(!d)return'';const s=String(d).split(' ')[0].trim().replace(/-/g,'/').split('/');
+  return s.length>=2?s[0]+'-'+s[1].padStart(2,'0'):'';
+}
 
 // ========== INIT ==========
 Chart.defaults.color='#475569';Chart.defaults.borderColor='rgba(100,116,139,.15)';
