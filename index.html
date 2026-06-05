@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>BeaverWorks 통합관리 v12.1 (Web)</title>
+<title>BeaverWorks 통합관리 v12.2 (Web)</title>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/xlsx-js-style@1.2.0/dist/xlsx.bundle.js"></script>
 <style>
@@ -136,6 +136,7 @@ const S={
   calFilter:'all',catOutMode:'all',
   invSort:{col:'amount',dir:'desc'},invFilterCol:'all',invFilterVal:'all',
   salesSort:{col:'total_amt',dir:'desc'},taView:'amt',salesView:'amt',custSaleType:'all',purchPriceFilter:'all',priceVarFilter:'all',priceVarSku:null,priceVarBand:'all',
+  itView:'qty',itType:'all',itCat:'all',itSearch:'',itSort:{col:'total',dir:'desc'},itSelected:[],itChartMax:10,
   bomDisc:{},
   cfg:{
     sl:{A:97,B:93,C:85},zs:{A:1.88,B:1.48,C:1.04},
@@ -636,6 +637,7 @@ function sidebar(){
     {id:'other_acct',ic:'📑',lb:'타계정 내역'},
     {id:'forecast',ic:'📈',lb:'수요 예측'},
     {id:'sales',ic:'💰',lb:'판매 분석'},
+    {id:'item_trend',ic:'📊',lb:'품목별 판매추이'},
     {id:'bom',ic:'🔧',lb:'BOM 관리'},
     {id:'cost',ic:'💹',lb:'원가 분석'},
     {id:'logic_ref',ic:'📐',lb:'수치산정 로직'},
@@ -647,7 +649,7 @@ function sidebar(){
     const ss=calcSS(i.sku_id);const eq=mio[i.sku_id]&&mio[i.sku_id][lastMk]?mio[i.sku_id][lastMk].eq:i.qty;
     return eq<=ss&&ss>0;
   }).length:0;
-  return`<nav class="sidebar" role="navigation" aria-label="메인 내비게이션"><div class="sidebar-hdr"><h1>BeaverWorks</h1><p>통합관리 v12.1 (Web)</p></div>
+  return`<nav class="sidebar" role="navigation" aria-label="메인 내비게이션"><div class="sidebar-hdr"><h1>BeaverWorks</h1><p>통합관리 v12.2 (Web)</p></div>
   <div class="nav">${items.map(i=>`<div class="ni ${S.pg===i.id?'active':''}" data-pg="${i.id}" role="button" tabindex="0"${S.pg===i.id?' aria-current="page"':''}><span class="ic" aria-hidden="true">${i.ic}</span><span>${i.lb}</span>${i.id==='inventory'&&alertCnt>0?`<span style="margin-left:auto;background:var(--rd);color:#fff;border-radius:8px;padding:1px 6px;font-size:9px" aria-label="부족 ${alertCnt}건">${alertCnt}</span>`:''}</div>`).join('')}</div>
   <div style="padding:10px;border-top:1px solid var(--bd);font-size:10px;color:var(--tx2)">기준일: ${(()=>{
     if(S.selMonth==='all'){const lm26=M26_DATA[M26_DATA.length-1];const ld=new Date(lm26+'-01');ld.setMonth(ld.getMonth()+1);ld.setDate(0);return S.selYear==='2025'?'2025-12-31':lm26+'-'+String(ld.getDate()).padStart(2,'0')}
@@ -665,6 +667,7 @@ function page(){
     case'purchase':return pgPurchase();
     case'price_var':return pgPriceVar();
     case'sales':return pgSales();
+    case'item_trend':return pgItemTrend();
     case'suppliers':return pgSupp();
     case'forecast':return pgFcast();
     case'other_acct':return pgOtherAcct();
@@ -2375,6 +2378,131 @@ function pgSales(){
       <div style="font-size:10px;color:var(--tx2);margin-top:6px">* 행 클릭→담당자 매출 상세 | 최대 20명</div></div>
     <div class="pn"><div class="pt">거래처 매출 비중 TOP 10 <span class="badge">${mLabel}</span></div><div class="cc-donut"><canvas id="cCustPie" aria-label="거래처 매출 비중 TOP 10 차트" role="img"></canvas></div></div>
   </div>`;
+}
+
+// ═══════════════ ITEM TREND (품목별 판매 추이) ═══════════════
+function toggleItSort(col){if(S.itSort.col===col)S.itSort.dir=S.itSort.dir==='asc'?'desc':'asc';else{S.itSort.col=col;S.itSort.dir='desc'}render()}
+function toggleItSelect(skuId){const idx=S.itSelected.indexOf(skuId);if(idx>=0)S.itSelected.splice(idx,1);else{if(S.itSelected.length>=10){alert('최대 10개까지 선택 가능합니다');return}S.itSelected.push(skuId)}render()}
+function itSelectTop(n){
+  const allMs=[...M25,...M26_DATA];const isAmt=S.itView==='amt';
+  let list=D.isd.slice();
+  if(S.itType!=='all')list=list.filter(i=>S.itType==='C'?i.sku_id.startsWith('C-'):S.itType==='B'?i.sku_id.startsWith('B-'):i.sku_id.startsWith('D-'));
+  if(S.itCat!=='all')list=list.filter(i=>getSkuCat(i.sku_id)===S.itCat);
+  list=list.map(i=>{const t=allMs.reduce((s,m)=>s+(i.monthly[m]?(isAmt?i.monthly[m].amt:i.monthly[m].qty):0),0);return{...i,total:t}}).filter(i=>i.total>0).sort((a,b)=>b.total-a.total);
+  S.itSelected=list.slice(0,n).map(i=>i.sku_id);render()
+}
+function pgItemTrend(){
+  const catMap={...C_CATS,...B_CATS};
+  const allMs=[...M25,...M26_DATA];
+  const isAmt=S.itView==='amt';
+
+  // 필터링
+  let list=D.isd.slice();
+  if(S.itType!=='all')list=list.filter(i=>S.itType==='C'?i.sku_id.startsWith('C-'):S.itType==='B'?i.sku_id.startsWith('B-'):i.sku_id.startsWith('D-'));
+  if(S.itCat!=='all')list=list.filter(i=>getSkuCat(i.sku_id)===S.itCat);
+  if(S.itSearch){const q=S.itSearch.toLowerCase();list=list.filter(i=>i.name.toLowerCase().includes(q)||i.sku_id.toLowerCase().includes(q))}
+
+  // 합계 계산
+  list=list.map(i=>{
+    const total=allMs.reduce((s,m)=>s+(i.monthly[m]?(isAmt?i.monthly[m].amt:i.monthly[m].qty):0),0);
+    return{...i,total};
+  }).filter(i=>i.total>0);
+
+  // 정렬
+  const sGetter=(i,col)=>{
+    if(col==='name')return i.name;
+    if(col==='cat')return catMap[getSkuCat(i.sku_id)]||'';
+    if(col==='total')return i.total;
+    if(col.startsWith('m_')){const m=col.slice(2);return i.monthly[m]?(isAmt?i.monthly[m].amt:i.monthly[m].qty):0}
+    return 0;
+  };
+  list=sortArr(list,S.itSort.col,S.itSort.dir,sGetter);
+
+  const grandTotal=list.reduce((s,i)=>s+i.total,0);
+  const selCount=S.itSelected.length;
+  const selItems=S.itSelected.map(sk=>list.find(i=>i.sku_id===sk)).filter(Boolean);
+  const selTotal=selItems.reduce((s,i)=>s+i.total,0);
+
+  // 대분류 목록 (필터용)
+  const allCats=[...new Set(D.isd.map(i=>getSkuCat(i.sku_id)))].sort();
+
+  // 차트용 색상 팔레트
+  const palette=['#2563eb','#dc2626','#15803d','#ca8a04','#7e22ce','#0e7490','#c2410c','#0891b2','#9333ea','#475569'];
+
+  return`<div class="kpi-sticky"><div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px"><h2 style="font-size:18px">품목별 판매 추이</h2>
+    <div class="btn-group"><div class="btn ${isAmt?'':'active'}" onclick="S.itView='qty';render()">수량</div><div class="btn ${isAmt?'active':''}" onclick="S.itView='amt';render()">금액</div></div></div>
+  <div class="kr">
+    <div class="kc"><div class="lb">전체 품목</div><div class="vl c-bl">${fmt(list.length)}종</div><div class="sb">${isAmt?'총 '+fmtM(grandTotal):'총 '+fmt(grandTotal)+'개'}</div></div>
+    <div class="kc"><div class="lb">선택 품목</div><div class="vl c-pp">${selCount}종</div><div class="sb">${isAmt?fmtM(selTotal):fmt(selTotal)+'개'} (${pct(selTotal,grandTotal)}%)</div></div>
+    <div class="kc"><div class="lb">데이터 기간</div><div class="vl" style="font-size:14px">${allMs[0]} ~ ${allMs[allMs.length-1]}</div><div class="sb">${allMs.length}개월</div></div>
+    <div class="kc"><div class="lb">빠른 선택</div><div style="display:flex;gap:4px;margin-top:4px">
+      <div class="btn" style="font-size:10px;padding:3px 8px" onclick="itSelectTop(3)">TOP 3</div>
+      <div class="btn" style="font-size:10px;padding:3px 8px" onclick="itSelectTop(5)">TOP 5</div>
+      <div class="btn" style="font-size:10px;padding:3px 8px" onclick="itSelectTop(10)">TOP 10</div>
+      <div class="btn" style="font-size:10px;padding:3px 8px" onclick="S.itSelected=[];render()">초기화</div>
+    </div></div>
+  </div></div>
+
+  <div class="pn" style="min-height:360px"><div class="pt">품목별 ${isAmt?'매출금액':'판매수량'} 추이 <span class="badge">${selCount}종 선택</span></div>
+    ${selCount===0?'<div style="display:flex;align-items:center;justify-content:center;height:280px;color:var(--tx2);font-size:14px">아래 테이블에서 품목을 선택하거나 빠른 선택 버튼을 사용하세요</div>'
+    :'<div class="cc" style="height:320px"><canvas id="cItemTrend" aria-label="품목별 판매 추이 차트" role="img"></canvas></div>'}
+  </div>
+
+  ${selCount>0?`<div class="pn"><div class="pt">선택 품목 월별 ${isAmt?'금액':'수량'} 비교<button class="xlsx-btn" onclick="exportTableCSV(this,'품목별판매추이')">📥 엑셀</button></div>
+    <div class="st" style="max-height:350px"><table>
+      <thead><tr><th>품목명</th>${allMs.map(m=>'<th class="tr">'+m.slice(2).replace('-','.')+'</th>').join('')}<th class="tr" style="font-weight:700">합계</th></tr></thead>
+      <tbody>${selItems.map((si,idx)=>{
+        return'<tr style="border-left:3px solid '+palette[idx%palette.length]+'">'+
+          '<td style="max-width:180px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="'+si.name+'">'+si.name+'</td>'+
+          allMs.map(m=>{const d=si.monthly[m];return'<td class="tr">'+(d?(isAmt?fmtM(d.amt):fmt(d.qty)):'-')+'</td>'}).join('')+
+          '<td class="tr" style="font-weight:600">'+(isAmt?fmtM(si.total):fmt(si.total))+'</td></tr>'
+      }).join('')}
+      ${selItems.length>1?'<tr style="font-weight:700;border-top:2px solid var(--bd)"><td>합계</td>'+allMs.map(m=>{
+        const t=selItems.reduce((s,i)=>s+(i.monthly[m]?(isAmt?i.monthly[m].amt:i.monthly[m].qty):0),0);
+        return'<td class="tr">'+(t>0?(isAmt?fmtM(t):fmt(t)):'-')+'</td>'}).join('')+'<td class="tr">'+(isAmt?fmtM(selTotal):fmt(selTotal))+'</td></tr>':''}
+      </tbody></table></div></div>`:''}
+
+  <div class="pn"><div class="pt">품목 목록 <span class="badge">${list.length}종</span><button class="xlsx-btn" onclick="exportTableCSV(this,'품목목록')">📥 엑셀</button></div>
+    <div class="tb" style="margin-bottom:8px;flex-wrap:wrap;gap:6px">
+      <div class="btn-group">
+        <div class="btn ${S.itType==='all'?'active':''}" onclick="S.itType='all';S.itCat='all';render()">전체</div>
+        <div class="btn ${S.itType==='C'?'active':''}" onclick="S.itType='C';S.itCat='all';render()">제품(C)</div>
+        <div class="btn ${S.itType==='B'?'active':''}" onclick="S.itType='B';S.itCat='all';render()">원재료(B)</div>
+        <div class="btn ${S.itType==='D'?'active':''}" onclick="S.itType='D';S.itCat='all';render()">상품(D)</div>
+      </div>
+      <select aria-label="대분류 필터" onchange="S.itCat=this.value;render()">
+        <option value="all">전체 대분류</option>
+        ${allCats.map(c=>'<option value="'+c+'"'+(S.itCat===c?' selected':'')+'>'+((catMap[c]||c)+' ('+c+')')+'</option>').join('')}
+      </select>
+      <input type="text" id="itSearchInput" aria-label="품목 검색" placeholder="품목명/코드 검색..." value="${S.itSearch}" onkeydown="if(event.key==='Enter'){S.itSearch=this.value;render()}" style="width:200px">
+      <div class="btn primary" onclick="S.itSearch=document.getElementById('itSearchInput').value;render()">검색</div>
+      ${S.itSearch?'<div class="btn" onclick="S.itSearch=\'\';render()">초기화</div>':''}
+    </div>
+    <div class="st" style="max-height:500px"><table>
+      <thead><tr>
+        <th style="width:30px">선택</th>
+        <th>유형</th>
+        <th class="sortable" onclick="toggleItSort('cat')">대분류 ${S.itSort.col==='cat'?(S.itSort.dir==='asc'?'▲':'▼'):''}</th>
+        <th class="sortable" onclick="toggleItSort('name')">품목명 ${S.itSort.col==='name'?(S.itSort.dir==='asc'?'▲':'▼'):''}</th>
+        ${M26_DATA.map(m=>'<th class="sortable tr" onclick="toggleItSort(\'m_'+m+'\')">'+m.slice(5)+'월 '+(S.itSort.col==='m_'+m?(S.itSort.dir==='asc'?'▲':'▼'):'')+'</th>').join('')}
+        <th class="sortable tr" onclick="toggleItSort('total')">합계 ${S.itSort.col==='total'?(S.itSort.dir==='asc'?'▲':'▼'):''}</th>
+        <th class="tr">비중</th>
+      </tr></thead>
+      <tbody>${list.slice(0,100).map(i=>{
+        const cat=getSkuCat(i.sku_id);const catNm=catMap[cat]||cat;
+        const isSel=S.itSelected.includes(i.sku_id);
+        const selIdx=S.itSelected.indexOf(i.sku_id);
+        const tp=i.sku_id.startsWith('C-')?'C':i.sku_id.startsWith('B-')?'B':'D';
+        return'<tr style="cursor:pointer;'+(isSel?'background:rgba(37,99,235,.08);border-left:3px solid '+palette[selIdx%palette.length]:'')+'" onclick="toggleItSelect(\''+i.sku_id+'\')">'
+          +'<td style="text-align:center"><input type="checkbox" '+(isSel?'checked':'')+' onclick="event.stopPropagation();toggleItSelect(\''+i.sku_id+'\')" style="cursor:pointer"></td>'
+          +'<td><span class="tg '+(tp==='C'?'tg-b':tp==='B'?'tg-c':'tg-y')+'">'+tp+'</span></td>'
+          +'<td><span class="tg tg-p" style="font-size:9px">'+catNm+'</span></td>'
+          +'<td style="max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="'+i.name+'">'+i.name+'</td>'
+          +M26_DATA.map(m=>{const d=i.monthly[m];return'<td class="tr">'+(d?(isAmt?fmtM(d.amt):fmt(d.qty)):'-')+'</td>'}).join('')
+          +'<td class="tr" style="font-weight:600">'+(isAmt?fmtM(i.total):fmt(i.total))+'</td>'
+          +'<td class="tr">'+pct(i.total,grandTotal)+'%</td></tr>'
+      }).join('')}</tbody></table></div>
+    <div style="font-size:10px;color:var(--tx2);margin-top:6px">* 행 클릭/체크박스로 품목 선택 → 상단 추이 차트에 반영 | 최대 100건 표시, 10종 선택 가능</div></div>`;
 }
 
 // ═══════════════ SUPPLIERS ═══════════════
@@ -4627,6 +4755,31 @@ function renderCharts(){
             donutLabels:{formatter:(v,pct)=>fmtM(v)+'('+pct+'%)'},
             legend:{position:'right',labels:{color:TC,font:{size:9}}}}}});
       _charts.push(cpChart);
+    }
+  }
+
+  // ══════ ITEM TREND ══════
+  if(S.pg==='item_trend'&&S.itSelected.length>0){
+    const itCanvas=document.getElementById('cItemTrend');
+    if(itCanvas){
+      const itAllMs=[...M25,...M26_DATA];
+      const isAmt=S.itView==='amt';
+      const itPalette=['#2563eb','#dc2626','#15803d','#ca8a04','#7e22ce','#0e7490','#c2410c','#0891b2','#9333ea','#475569'];
+      const itLabels=itAllMs.map(m=>m.slice(2).replace('-','.'));
+      const datasets=S.itSelected.map((sk,idx)=>{
+        const item=D.isd.find(i=>i.sku_id===sk);
+        if(!item)return null;
+        const data=itAllMs.map(m=>item.monthly[m]?(isAmt?item.monthly[m].amt:item.monthly[m].qty):0);
+        const nm=item.name.length>20?item.name.slice(0,20)+'..':item.name;
+        return{label:nm,data,borderColor:itPalette[idx%itPalette.length],backgroundColor:itPalette[idx%itPalette.length]+'22',
+          borderWidth:2,pointRadius:3,pointHoverRadius:5,tension:.3,fill:false};
+      }).filter(Boolean);
+      _charts.push(new Chart(itCanvas,{type:'line',data:{labels:itLabels,datasets},
+        options:{responsive:true,maintainAspectRatio:false,interaction:{mode:'index',intersect:false},
+          plugins:{legend:{position:'bottom',labels:{color:TC,font:{size:10},usePointStyle:true,boxWidth:8}},
+            tooltip:{callbacks:{label:ctx=>{const v=ctx.parsed.y;return ctx.dataset.label+': '+(isAmt?fmtM(v):fmt(v)+'개')}}}},
+          scales:{x:{ticks:{color:TC,font:{size:9},maxRotation:45},grid:{color:'rgba(255,255,255,.05)'}},
+            y:{ticks:{color:TC,font:{size:10},callback:v=>isAmt?fmtM(v):fmt(v)},grid:{color:'rgba(255,255,255,.08)'}}}}}));
     }
   }
 
