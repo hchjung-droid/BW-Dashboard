@@ -299,9 +299,11 @@ async function _buildReport(setStatus) {
     });
     const bomCR = avgSP > 0 && bomCost > 0 ? +(bomCost / avgSP * 100).toFixed(1) : 0;
 
-    // 선택월 매출
-    const periodSales = selMs.reduce((s, m) => { const d = (D.isd.find(x => x.sku_id === sku) || {}).monthly; return s + (d && d[m] ? d[m].amt : 0); }, 0);
-    if (avgSP > 0 || uc > 0) costItems.push({ sku, name: _nm(sku), uc, avgSP, cr, margin, bomCost, bomCR, children: children.length, periodSales });
+    // 선택월 매출 (금액 + 수량)
+    const isdItem = D.isd.find(x => x.sku_id === sku);
+    const periodSales = selMs.reduce((s, m) => { const d = isdItem ? isdItem.monthly : null; return s + (d && d[m] ? d[m].amt : 0); }, 0);
+    const periodQty = selMs.reduce((s, m) => { const d = isdItem ? isdItem.monthly : null; return s + (d && d[m] ? d[m].qty : 0); }, 0);
+    if (avgSP > 0 || uc > 0) costItems.push({ sku, name: _nm(sku), uc, avgSP, cr, margin, bomCost, bomCR, children: children.length, periodSales, periodQty });
   });
   costItems.sort((a, b) => b.cr - a.cr);
   const withCR = costItems.filter(c => c.cr > 0);
@@ -623,23 +625,30 @@ async function _buildReport(setStatus) {
   const s8 = pres.addSlide();
   addTitle(s8, '💹', `원가 상세 — ${periodStr} 판매 품목`, '원가율 높은 순');
 
-  const crRows = costItems.slice(0, 12).map(c => [
-    c.name,
-    { text: _f(c.uc), options: { align: 'right' } },
-    { text: _f(c.avgSP), options: { align: 'right' } },
-    { text: c.cr + '%', options: { align: 'right', color: c.cr > 70 ? C.red : c.cr > 50 ? C.orange : C.green, bold: c.cr > 70 } },
-    { text: c.margin + '%', options: { align: 'right', color: c.margin < 30 ? C.red : C.dark } },
-    { text: _m(c.periodSales), options: { align: 'right' } }
-  ]);
+  const crRows = costItems.slice(0, 12).map(c => {
+    const diffPct = c.cr > 0 && c.bomCR > 0 ? +(c.bomCR - c.cr).toFixed(1) : 0;
+    return [
+      c.name,
+      { text: _f(c.uc), options: { align: 'right' } },
+      { text: _f(c.avgSP), options: { align: 'right' } },
+      { text: c.cr + '%', options: { align: 'right', color: c.cr > 70 ? C.red : c.cr > 50 ? C.orange : C.green, bold: c.cr > 70 } },
+      { text: c.bomCR + '%', options: { align: 'right', color: c.bomCR > 70 ? C.red : c.bomCR > 50 ? C.orange : C.green } },
+      { text: (diffPct >= 0 ? '+' : '') + diffPct + '%p', options: { align: 'right', color: Math.abs(diffPct) > 15 ? C.orange : C.sub, fontSize: 8 } },
+      { text: _f(c.periodQty), options: { align: 'right' } },
+      { text: _m(c.periodSales), options: { align: 'right' } }
+    ];
+  });
   s8.addTable([
     [{ text: '품목명', options: hdrStyle() },
      { text: '수불부원가', options: hdrR() },
      { text: '판매단가', options: hdrR() },
      { text: '원가율', options: hdrR() },
-     { text: '마진율', options: hdrR() },
-     { text: '당월매출', options: hdrR() }],
+     { text: 'BOM원가율', options: hdrR() },
+     { text: '차이', options: hdrR() },
+     { text: '수량', options: hdrR() },
+     { text: '매출', options: hdrR() }],
     ...crRows
-  ], { x: L.mx, y: L.bodyY, w: L.tblFull, fontSize: 9.5, border: tblBorder, colW: [2.8, 1.2, 1.2, 1.0, 1.0, 2.0], autoPage: false });
+  ], { x: L.mx, y: L.bodyY, w: L.tblFull, fontSize: 8.5, border: tblBorder, colW: [2.2, 1.0, 1.0, 0.85, 0.95, 0.7, 0.7, 1.8], autoPage: false });
 
   // ══════════════════════════════════════════════════════
   // SLIDE 9: ★ 고위험 원가 상세 (>70%) — 신규
