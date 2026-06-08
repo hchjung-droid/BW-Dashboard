@@ -3,9 +3,10 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>BeaverWorks 통합관리 v12.2 (Web)</title>
+<title>BeaverWorks 통합관리 v12.3 (Web)</title>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/xlsx-js-style@1.2.0/dist/xlsx.bundle.js"></script>
+<script src="https://cdn.jsdelivr.net/gh/gitbrent/PptxGenJS@3.12.0/dist/pptxgen.bundle.js"></script>
 <style>
 :root{--bg:#f1f5f9;--sf:#ffffff;--sf2:#e2e8f0;--bd:#8896a8;--tx:#1e293b;--tx2:#475569;--ac:#2563eb;--ac2:#0e7490;--gn:#15803d;--rd:#dc2626;--yl:#92400e;--or:#c2410c;--pp:#7e22ce}
 *{margin:0;padding:0;box-sizing:border-box}
@@ -649,8 +650,9 @@ function sidebar(){
     const ss=calcSS(i.sku_id);const eq=mio[i.sku_id]&&mio[i.sku_id][lastMk]?mio[i.sku_id][lastMk].eq:i.qty;
     return eq<=ss&&ss>0;
   }).length:0;
-  return`<nav class="sidebar" role="navigation" aria-label="메인 내비게이션"><div class="sidebar-hdr"><h1>BeaverWorks</h1><p>통합관리 v12.2 (Web)</p></div>
+  return`<nav class="sidebar" role="navigation" aria-label="메인 내비게이션"><div class="sidebar-hdr"><h1>BeaverWorks</h1><p>통합관리 v12.3 (Web)</p></div>
   <div class="nav">${items.map(i=>`<div class="ni ${S.pg===i.id?'active':''}" data-pg="${i.id}" role="button" tabindex="0"${S.pg===i.id?' aria-current="page"':''}><span class="ic" aria-hidden="true">${i.ic}</span><span>${i.lb}</span>${i.id==='inventory'&&alertCnt>0?`<span style="margin-left:auto;background:var(--rd);color:#fff;border-radius:8px;padding:1px 6px;font-size:9px" aria-label="부족 ${alertCnt}건">${alertCnt}</span>`:''}</div>`).join('')}</div>
+  <div style="padding:10px;border-top:1px solid var(--bd)"><button onclick="generateReport()" style="width:100%;padding:9px 12px;background:linear-gradient(135deg,#1E2761,#2563eb);color:#fff;border:none;border-radius:7px;font-size:12px;font-weight:600;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:6px;transition:opacity .15s" onmouseover="this.style.opacity='0.85'" onmouseout="this.style.opacity='1'"><span>📑</span> 보고서 생성 (PPT)</button></div>
   <div style="padding:10px;border-top:1px solid var(--bd);font-size:10px;color:var(--tx2)">기준일: ${(()=>{
     if(S.selMonth==='all'){const lm26=M26_DATA[M26_DATA.length-1];const ld=new Date(lm26+'-01');ld.setMonth(ld.getMonth()+1);ld.setDate(0);return S.selYear==='2025'?'2025-12-31':lm26+'-'+String(ld.getDate()).padStart(2,'0')}
     if(S.selMonth.startsWith('Q')){const qm=getQuarterMonths(S.selMonth,S.selYear);const lm=qm[qm.length-1];const d=new Date(lm+'-01');d.setMonth(d.getMonth()+1);d.setDate(0);return lm+'-'+String(d.getDate()).padStart(2,'0')}
@@ -5542,5 +5544,6 @@ Chart.defaults.plugins.tooltip.padding=10;
 Chart.defaults.plugins.tooltip.displayColors=true;
 render();
 </script>
+<script src="report_gen.js"></script>
 </body>
 </html>
