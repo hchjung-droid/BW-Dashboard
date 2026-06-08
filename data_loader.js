@@ -652,12 +652,19 @@ function parseTaDetail(rows, codeMap) {
   const acctAgg = {};
   let skippedRows = 0;
 
+  // Google Sheets 월 형식 "Jan-25" → MM 변환용
+  const GMONTH = {Jan:'01',Feb:'02',Mar:'03',Apr:'04',May:'05',Jun:'06',
+                  Jul:'07',Aug:'08',Sep:'09',Oct:'10',Nov:'11',Dec:'12'};
+
   for (const row of rows) {
     // B열(인덱스1) = 출고일 — 다양한 날짜 형식 지원
     const rawDate = _s(row[1]);
     if (!rawDate) { skippedRows++; continue; }
 
-    // 날짜 형식 인식: "2025/01/01", "2025-01-01", "1/1/2025", "01/01/2025"
+    // 요약/집계 행 스킵 (합 계, Summary, 구분, 원재료, 제품, 상품, 합계 등)
+    if (/^(합 계|합계|Summary|구분|원재료|제품|상품)$/i.test(rawDate)) { skippedRows++; continue; }
+
+    // 날짜 형식 인식: YYYY/MM/DD, M/D/YYYY, M/D/YY, #######(Google Sheets 폭부족)
     let dStr = '';
     if (/^\d{4}[\/\-]/.test(rawDate)) {
       // YYYY/MM/DD or YYYY-MM-DD
@@ -675,6 +682,17 @@ function parseTaDetail(rows, codeMap) {
       const dd = parts[1].padStart(2, '0');
       const yr = parseInt(parts[2]) < 50 ? '20' + parts[2] : '19' + parts[2];
       dStr = yr + '/' + mm + '/' + dd;
+    } else if (/^#+$/.test(rawDate)) {
+      // Google Sheets 컬럼 폭 부족 → "#######" 출력됨
+      // A열(row[0]) 월 정보에서 날짜 추출: "Jan-25"→"2025/01/01", "2025-01"→"2025/01/01"
+      const mc = _s(row[0]);
+      const m = mc && mc.match(/^([A-Za-z]{3})-(\d{2})$/);
+      if (m && GMONTH[m[1]]) {
+        const yr = parseInt(m[2]) < 50 ? '20' + m[2] : '19' + m[2];
+        dStr = yr + '/' + GMONTH[m[1]] + '/01';
+      } else if (mc && /^\d{4}-\d{2}$/.test(mc)) {
+        dStr = mc.replace('-', '/') + '/01';
+      } else { skippedRows++; continue; }
     } else {
       skippedRows++; continue;
     }

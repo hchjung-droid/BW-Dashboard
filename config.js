@@ -19,7 +19,7 @@ const SHEETS_CONFIG = {
   SHEETS: {
     subul_b:    { id: '1F7IbHocw-0LSNZ-NYQZs76cQ-t7M_sVL_LOsb7jETZo', name: '원재료B' },
     subul_c:    { id: '1rhO4EEdnUhlx21qqx5oJXE8lp94lhOCww-Ho0VwKH8E', name: '제품C' },
-    ta_detail:  { id: '1htpbNVn5HRfoXfeXYEDyD8HsnDYJyxxsnaeNi4nR0lI', name: '타계정내역' },
+    ta_detail:  { id: '1htpbNVn5HRfoXfeXYEDyD8HsnDYJyxxsnaeNi4nR0lI', name: '타계정내역', gid: '275792136' },
     sales:      { id: '1RvRiCMZUFw4VCIwWjhTq3v27_zySYM6iokF3Vw5tnWA', name: '판매현황' },
     purchase:   { id: '1av1bb3PYH3vgJ9eSEH4sFumn6GD1YmlDw_V18wxukEM', name: '구매현황' },
     orders:     { id: '1f043aCULe5AoBvlYCsvoxclTwTDFCuboq1hUxC-i9J8', name: '발주서' },
@@ -33,7 +33,9 @@ const SHEETS_CONFIG = {
     const cfg = this.SHEETS[sheetKey];
     if (!cfg || !cfg.id) return null;
     // Google Sheets gviz CSV endpoint (CORS 지원, 공유 설정 필요: 링크가 있는 모든 사용자 → 뷰어)
-    return `https://docs.google.com/spreadsheets/d/${cfg.id}/gviz/tq?tqx=out:csv`;
+    let url = `https://docs.google.com/spreadsheets/d/${cfg.id}/gviz/tq?tqx=out:csv`;
+    if (cfg.gid) url += `&gid=${cfg.gid}`;
+    return url;
   },
 
   // ===== 수불부 원천 Excel 컬럼 오프셋 =====
