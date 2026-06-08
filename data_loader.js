@@ -650,13 +650,34 @@ function parseSkuMaster(rows, codeMap) {
 function parseTaDetail(rows, codeMap) {
   const ta = [];
   const acctAgg = {};
+  let skippedRows = 0;
 
   for (const row of rows) {
-    // B열(인덱스1) = 출고일
+    // B열(인덱스1) = 출고일 — 다양한 날짜 형식 지원
     const rawDate = _s(row[1]);
-    if (!rawDate || !/^\d{4}/.test(rawDate)) continue;
+    if (!rawDate) { skippedRows++; continue; }
 
-    const dStr = _parseDateNo(rawDate);
+    // 날짜 형식 인식: "2025/01/01", "2025-01-01", "1/1/2025", "01/01/2025"
+    let dStr = '';
+    if (/^\d{4}[\/\-]/.test(rawDate)) {
+      // YYYY/MM/DD or YYYY-MM-DD
+      dStr = _parseDateNo(rawDate);
+    } else if (/^\d{1,2}\/\d{1,2}\/\d{4}/.test(rawDate)) {
+      // M/D/YYYY (Google Sheets gviz 출력 형식)
+      const parts = rawDate.split('/');
+      const mm = parts[0].padStart(2, '0');
+      const dd = parts[1].padStart(2, '0');
+      dStr = parts[2] + '/' + mm + '/' + dd;
+    } else if (/^\d{1,2}\/\d{1,2}\/\d{2}$/.test(rawDate)) {
+      // M/D/YY (2자리 연도)
+      const parts = rawDate.split('/');
+      const mm = parts[0].padStart(2, '0');
+      const dd = parts[1].padStart(2, '0');
+      const yr = parseInt(parts[2]) < 50 ? '20' + parts[2] : '19' + parts[2];
+      dStr = yr + '/' + mm + '/' + dd;
+    } else {
+      skippedRows++; continue;
+    }
     let sku = _s(row[3]);
     if (!sku) continue;
     sku = mapCode(sku, codeMap);
@@ -682,6 +703,7 @@ function parseTaDetail(rows, codeMap) {
     .sort(([, a], [, b]) => b.amt - a.amt)
     .map(([k, v]) => ({ ac: k, qty: v.qty, amt: v.amt }));
 
+  if (skippedRows > 0) console.warn(`[DataLoader] 타계정: ${skippedRows}행 스킵됨 (날짜 미인식). 첫 행 샘플: row[1]="${_s(rows[0]&&rows[0][1])}"`, rows[0]);
   console.log(`[DataLoader] 타계정: ${ta.length} records, ${taSumOt.length} account types`);
   return { taOt: ta, taOtSum: taSumOt };
 }
