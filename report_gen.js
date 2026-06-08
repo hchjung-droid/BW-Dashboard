@@ -45,12 +45,20 @@ async function _buildReport(setStatus) {
   const _f = n => n == null ? '0' : Number(n).toLocaleString('ko-KR');
   const _m = n => { if (!n || n === 0) return '0.00M'; return (n / 1e6).toFixed(2) + 'M'; };
   const _chg = (cur, prev) => { if (!prev || prev === 0) return ''; const p = ((cur - prev) / prev * 100).toFixed(1); return (p >= 0 ? '+' : '') + p + '%'; };
-  // 품목명 풀네임 (truncation 없음)
+  // 품목명 풀네임 (truncation 없음) — 여러 소스에서 이름 탐색
   const _nm = (skuId) => {
+    // 1) SKU 마스터
     const s = skuMap[skuId];
     if (s && (s.name || s.n)) return (s.name || s.n);
+    // 2) 재고 (item_name 필드)
     const inv = D.inv.find(i => i.sku_id === skuId);
-    if (inv && inv.name) return inv.name;
+    if (inv && (inv.item_name || inv.name)) return (inv.item_name || inv.name);
+    // 3) 판매집계 (isd)
+    const isd = D.isd.find(i => i.sku_id === skuId);
+    if (isd && isd.name) return isd.name;
+    // 4) 발주 (po)
+    const po = D.po.find(p => p.sku_id === skuId);
+    if (po && po.item_name) return po.item_name;
     return skuId;
   };
 
@@ -115,8 +123,8 @@ async function _buildReport(setStatus) {
   let prevEndAmt = 0, prevEndQty = 0;
   if (prevMk) Object.values(mio).forEach(d => { if (d[prevMk]) { prevEndAmt += d[prevMk].ea || 0; prevEndQty += d[prevMk].eq || 0; } });
 
-  // Health
-  const getEq = sku => mio[sku] && mio[sku][lastMk] ? mio[sku][lastMk].eq : 0;
+  // Health — 대시보드와 동일한 getEq (fallback: D.inv.qty)
+  const getEq = sku => mio[sku] && mio[sku][lastMk] ? mio[sku][lastMk].eq : ((D.inv.find(x => x.sku_id === sku) || {}).qty || 0);
   const activeInv = D.inv.filter(i => (i.qty !== 0 || i.amount !== 0) && i.sku_id.startsWith('B-'));
   let cntNormal = 0, cntLow = 0, cntExcess = 0, cntNoDemand = 0, cntNoStock = 0;
   const lowItems = [], excessItems = [], noDemandItems = [];
@@ -210,6 +218,20 @@ async function _buildReport(setStatus) {
   periodPO.forEach(p => { const st = p.status || '미확인'; if (!poByStatus[st]) poByStatus[st] = { cnt: 0, amt: 0 }; poByStatus[st].cnt++; poByStatus[st].amt += p.amount || 0; });
   const compRate = periodPO.length > 0 ? Math.round(periodPO.filter(p => p.status === '완료').length / periodPO.length * 100) : 0;
 
+  // 미입고(진행중) 잔량
+  const pendingPO = periodPO.filter(p => p.status === '진행중');
+  const pendingAmt = pendingPO.reduce((s, p) => s + (p.amount || 0), 0);
+  const pendingQty = pendingPO.reduce((s, p) => s + (p.qty || 0), 0);
+
+  // 품목별 발주 TOP
+  const poByItem = {};
+  periodPO.forEach(p => {
+    const nm = p.item_name || p.sku_id || '-';
+    if (!poByItem[nm]) poByItem[nm] = { cnt: 0, amt: 0, qty: 0 };
+    poByItem[nm].cnt++; poByItem[nm].amt += p.amount || 0; poByItem[nm].qty += p.qty || 0;
+  });
+  const topPOItems = Object.entries(poByItem).sort((a, b) => b[1].amt - a[1].amt).slice(0, 7);
+
   // 전월 발주
   let prevPOAmt = 0;
   if (prevMs.length > 0) {
@@ -249,10 +271,16 @@ async function _buildReport(setStatus) {
   // ── 타계정 ──
   const taAll = D.ta || [];
   const taYr = taAll.filter(t => (t.d || '').startsWith(yr));
-  const taTotal = taYr.reduce((s, t) => s + (t.a || 0), 0);
-  const taQty = taYr.reduce((s, t) => s + (t.q || 0), 0);
+  // 연간 합계 (추이 차트용)
+  const taYrTotal = taYr.reduce((s, t) => s + (t.a || 0), 0);
+  const taYrQty = taYr.reduce((s, t) => s + (t.q || 0), 0);
+  // 당월분 (계정별 집계용) — selMs 기준 필터
+  const selMsSet = new Set(selMs.map(m => m.slice(5, 7)));
+  const taMonth = taYr.filter(t => selMsSet.has((t.d || '').substring(5, 7)));
+  const taTotal = taMonth.reduce((s, t) => s + (t.a || 0), 0);
+  const taQty = taMonth.reduce((s, t) => s + (t.q || 0), 0);
   const taByAcct = {};
-  taYr.forEach(t => { const ac = t.ac || '(미분류)'; if (!taByAcct[ac]) taByAcct[ac] = { qty: 0, amt: 0 }; taByAcct[ac].qty += t.q || 0; taByAcct[ac].amt += t.a || 0; });
+  taMonth.forEach(t => { const ac = t.ac || '(미분류)'; if (!taByAcct[ac]) taByAcct[ac] = { qty: 0, amt: 0 }; taByAcct[ac].qty += t.q || 0; taByAcct[ac].amt += t.a || 0; });
   const taAcctList = Object.entries(taByAcct).sort((a, b) => b[1].amt - a[1].amt);
   const taMs = yr === '2026' ? M26_DATA : M25;
   const taMonthly = {};
@@ -302,7 +330,7 @@ async function _buildReport(setStatus) {
     { label: '발주규모', val: _m(poAmt), chg: _chg(poAmt, prevPOAmt), color: C.purple },
     { label: '평균원가율', val: avgCR + '%', chg: '', color: avgCR > 60 ? C.red : C.green },
     { label: '타계정', val: _m(taTotal), chg: '', color: C.orange },
-    { label: '납기완료율', val: compRate + '%', chg: '', color: compRate >= 80 ? C.green : C.red },
+    { label: '미입고 잔량', val: _f(pendingPO.length) + '건', chg: _m(pendingAmt), color: pendingPO.length > 10 ? C.red : C.teal },
     { label: '거래처집중도', val: custConcentration + '%', chg: 'TOP5 비중', color: custConcentration > 80 ? C.orange : C.teal },
   ];
   kpis.forEach((kpi, idx) => {
@@ -340,15 +368,24 @@ async function _buildReport(setStatus) {
     catAxisLabelColor: C.gray, valAxisLabelColor: C.gray
   });
 
-  // Health doughnut
+  // Health gauge (반원 게이지)
+  const gaugeColor = healthScore >= 70 ? C.green : healthScore >= 40 ? C.orange : C.red;
   s3.addChart(pres.charts.DOUGHNUT, [{
-    name: '상태', labels: ['정상', '부족', '재고없음', '과다', '무수요'],
-    values: [cntNormal, cntLow, cntNoStock, cntExcess, cntNoDemand]
+    name: '건강도', labels: ['건강도', '잔여', '하단(숨김)'],
+    values: [healthScore, 100 - healthScore, 100]
   }], {
-    x: 5.6, y: 0.9, w: 4.0, h: 2.8,
-    showTitle: true, title: `건강도: ${healthScore}점 / 100`, titleColor: C.sub, titleFontSize: 11,
-    chartColors: [C.green, C.yellow, C.red, C.orange, C.purple],
-    showPercent: true, showLegend: true, legendPos: 'b', legendFontSize: 9
+    x: 5.6, y: 0.7, w: 4.0, h: 3.2,
+    showTitle: false,
+    chartColors: [gaugeColor, 'E2E8F0', C.white],
+    showPercent: false, showValue: false, showLegend: false,
+    dataLabelPosition: 'none',
+  });
+  // 게이지 중심 텍스트
+  s3.addText('건강도', { x: 6.5, y: 2.1, w: 2.2, h: 0.3, fontSize: 11, color: C.sub, align: 'center', margin: 0 });
+  s3.addText(`${healthScore}/100`, { x: 6.5, y: 2.35, w: 2.2, h: 0.5, fontSize: 26, bold: true, color: gaugeColor, align: 'center', margin: 0 });
+  // 범례 텍스트
+  s3.addText(`●정상 ${cntNormal}  ●부족 ${cntLow}  ●재고없음 ${cntNoStock}  ●과다 ${cntExcess}  ●무수요 ${cntNoDemand}`, {
+    x: 5.6, y: 3.55, w: 4.0, h: 0.3, fontSize: 8, color: C.sub, align: 'center', margin: 0
   });
 
   const invIns = [];
@@ -571,20 +608,23 @@ async function _buildReport(setStatus) {
     });
   }
 
-  // Status table
-  s9.addText('상태별 현황', { x: 5.7, y: 0.9, w: 4, h: 0.3, fontSize: 11, bold: true, color: C.sub, margin: 0 });
-  s9.addTable([
-    [{ text: '상태', options: { bold: true, fill: { color: C.navy }, color: C.white } },
-     { text: '건수', options: { bold: true, fill: { color: C.navy }, color: C.white, align: 'right' } },
-     { text: '금액', options: { bold: true, fill: { color: C.navy }, color: C.white, align: 'right' } }],
-    ...Object.entries(poByStatus).sort((a, b) => b[1].amt - a[1].amt).map(([st, v]) => [
-      st, { text: _f(v.cnt), options: { align: 'right' } }, { text: _m(v.amt), options: { align: 'right' } }
-    ])
-  ], { x: 5.7, y: 1.2, w: 3.9, h: 0.3 + Object.keys(poByStatus).length * 0.38, fontSize: 10, border: { type: 'solid', pt: 0.5, color: 'E2E8F0' }, colW: [1.4, 1.0, 1.5] });
+  // 미입고 현황 + 발주 품목 TOP
+  s9.addText(`📌 미입고 잔량 — ${_f(pendingPO.length)}건 / ${_m(pendingAmt)}`, { x: 5.7, y: 0.9, w: 3.9, h: 0.3, fontSize: 10, bold: true, color: C.red, margin: 0 });
+  if (topPOItems.length > 0) {
+    s9.addText('품목별 발주 TOP', { x: 5.7, y: 1.25, w: 3.9, h: 0.25, fontSize: 10, bold: true, color: C.sub, margin: 0 });
+    s9.addTable([
+      [{ text: '품목명', options: { bold: true, fill: { color: C.navy }, color: C.white } },
+       { text: '수량', options: { bold: true, fill: { color: C.navy }, color: C.white, align: 'right' } },
+       { text: '금액', options: { bold: true, fill: { color: C.navy }, color: C.white, align: 'right' } }],
+      ...topPOItems.map(([nm, v]) => [
+        nm, { text: _f(v.qty), options: { align: 'right' } }, { text: _m(v.amt), options: { align: 'right' } }
+      ])
+    ], { x: 5.7, y: 1.5, w: 3.9, h: 0.3 + topPOItems.length * 0.34, fontSize: 9, border: { type: 'solid', pt: 0.5, color: 'E2E8F0' }, colW: [1.7, 0.8, 1.4] });
+  }
 
   const poIns = [];
   poIns.push(`${periodStr} 발주 ${_f(periodPO.length)}건, ${_m(poAmt)}${prevPOAmt > 0 ? ' (전월 ' + _m(prevPOAmt) + ', ' + _chg(poAmt, prevPOAmt) + ')' : ''}`);
-  poIns.push(`납기완료율 ${compRate}% — ${compRate >= 80 ? '양호' : '⚠️ 미흡, 관리강화 필요'}`);
+  poIns.push(`미입고 ${_f(pendingPO.length)}건 (${_m(pendingAmt)}) — ${pendingPO.length > 10 ? '⚠️ 지연 관리 필요' : '정상 범위'}`);
   if (topPOVendors.length > 0) poIns.push(`최대: ${topPOVendors[0][0]} (${_m(topPOVendors[0][1].amt)}, 비중 ${poAmt > 0 ? Math.round(topPOVendors[0][1].amt / poAmt * 100) : 0}%)`);
   addInsights(s9, poIns, 4.1);
 
@@ -672,7 +712,7 @@ async function _buildReport(setStatus) {
   const s12 = pres.addSlide();
   s12.background = { color: C.white };
   s12.addText('📑 타계정 내역', { x: 0.5, y: 0.25, w: 6, h: 0.55, fontSize: 24, fontFace: 'Arial Black', color: C.dark, margin: 0 });
-  s12.addText(`${yr}년 총 ${_m(taTotal)} / ${_f(taQty)}건`, { x: 5.5, y: 0.3, w: 4, h: 0.35, fontSize: 11, color: C.sub, align: 'right' });
+  s12.addText(`${periodStr} ${_m(taTotal)} / ${_f(taQty)}건  (${yr}년 누계 ${_m(taYrTotal)})`, { x: 4.0, y: 0.3, w: 5.5, h: 0.35, fontSize: 11, color: C.sub, align: 'right' });
 
   // Monthly trend
   const taLabels = Object.keys(taMonthly).map(m => m.slice(5) + '월');
@@ -690,7 +730,7 @@ async function _buildReport(setStatus) {
   }
 
   // Account breakdown
-  s12.addText('계정별 집계', { x: 5.8, y: 0.9, w: 4, h: 0.3, fontSize: 11, bold: true, color: C.sub, margin: 0 });
+  s12.addText(`계정별 집계 (${periodStr})`, { x: 5.8, y: 0.9, w: 4, h: 0.3, fontSize: 11, bold: true, color: C.sub, margin: 0 });
   if (taAcctList.length > 0) {
     s12.addTable([
       [{ text: '계정', options: { bold: true, fill: { color: C.navy }, color: C.white } },
@@ -703,9 +743,9 @@ async function _buildReport(setStatus) {
   }
 
   const taIns = [];
-  taIns.push(`${yr}년 타계정 총 ${_m(taTotal)} (${_f(taQty)}건)`);
-  if (taAcctList.length > 0) taIns.push(`최대: ${taAcctList[0][0]} — ${_m(taAcctList[0][1].amt)} (${taTotal > 0 ? Math.round(taAcctList[0][1].amt / taTotal * 100) : 0}%)`);
-  if (taTotal > 50000000) taIns.push(`⚠️ 규모 ${_m(taTotal)} — 정리/회수 계획 수립 필요`);
+  taIns.push(`${periodStr} 타계정 ${_m(taTotal)} (${_f(taQty)}건) — ${yr}년 누계 ${_m(taYrTotal)}`);
+  if (taAcctList.length > 0) taIns.push(`당월 최대: ${taAcctList[0][0]} — ${_m(taAcctList[0][1].amt)} (${taTotal > 0 ? Math.round(taAcctList[0][1].amt / taTotal * 100) : 0}%)`);
+  if (taYrTotal > 50000000) taIns.push(`⚠️ 연간 누계 ${_m(taYrTotal)} — 정리/회수 계획 수립 필요`);
   addInsights(s12, taIns, 4.1);
 
   // ══════════════════════════════════════════════════════
