@@ -204,29 +204,110 @@ async function _buildReport(setStatus) {
     prevAmt: prevMs.reduce((s, m) => s + (i.monthly[m] ? i.monthly[m].amt : 0), 0)
   })).filter(i => i.amt > 0).sort((a, b) => b.amt - a.amt).slice(0, 10);
 
-  // ── 원가 (★ 선택월 판매 품목만) ──
+  // ── 원가 (★ 대시보드와 동일 로직: 수불부 단가 / 판매단가) ──
+  const DATA_MONTHS = [...M25, ...M26_DATA];
   const parents = new Set(D.bom.map(b => b.parent_sku));
+  const allPur = [...(D.purch25 || []), ...(D.purch26 || [])].sort((a, b) => (b.date || '').localeCompare(a.date || ''));
+  // 원가 기준월: 선택월의 마지막 월
+  const costRefMk = lastMk;
   let costItems = [];
   parents.forEach(sku => {
     if (S.bomDisc && S.bomDisc[sku]) return;
-    if (!soldSkus.has(sku)) return; // ★ 선택월에 판매된 품목만 원가분석 대상
+    if (!soldSkus.has(sku)) return; // ★ 선택월에 판매된 품목만
     const inv = D.inv.find(i => i.sku_id === sku); if (!inv) return;
+
+    // ── 수불부 단가 (uc): 대시보드와 동일 — 기말→입고→출고→직전월 역추적 ──
+    const io = mio[sku];
+    let uc = 0;
+    if (io) {
+      // ① 해당월 기말단가 → 입고단가 → 출고단가
+      const r = io[costRefMk];
+      if (r && r.eq > 0 && r.ea > 0) uc = Math.round(r.ea / r.eq);
+      else if (r && r.iq > 0 && r.ia > 0) uc = Math.round(r.ia / r.iq);
+      else if (r && (r.on > 0 || r.ot > 0) && r.oa > 0) uc = Math.round(r.oa / ((r.on || 0) + (r.ot || 0)));
+      // ② 직전월 역추적
+      if (uc <= 0) {
+        const idx = DATA_MONTHS.indexOf(costRefMk);
+        for (let j = idx - 1; j >= 0; j--) {
+          const pm = DATA_MONTHS[j], rr = io[pm];
+          if (!rr) continue;
+          if (rr.eq > 0 && rr.ea > 0) { uc = Math.round(rr.ea / rr.eq); break; }
+          if (rr.iq > 0 && rr.ia > 0) { uc = Math.round(rr.ia / rr.iq); break; }
+          if ((rr.on > 0 || rr.ot > 0) && rr.oa > 0) { uc = Math.round(rr.oa / ((rr.on || 0) + (rr.ot || 0))); break; }
+        }
+      }
+    }
+    if (uc <= 0 && inv.unit_cost > 0) uc = inv.unit_cost;
+
+    // ── 판매단가 (avgSP): 선택월 sales_tx 기준 ──
     const tx = D.sales_tx ? D.sales_tx.filter(t => t.sku_id === sku) : [];
     let paidAmt = 0, paidQty = 0;
-    tx.forEach(t => { if ((t.amt || 0) > 0) { paidQty += t.qty || 0; paidAmt += t.amt || 0; } });
-    const sp = paidQty > 0 ? Math.round(paidAmt / paidQty) : 0;
+    const selPrefixes = selMs.map(m => m.replace('-', '/'));
+    tx.forEach(t => {
+      if ((t.amt || 0) <= 0) return;
+      const tPrefix = (t.date || '').substring(0, 7);
+      if (selPrefixes.some(p => tPrefix === p)) { paidQty += t.qty || 0; paidAmt += t.amt || 0; }
+    });
+    // fallback: 선택월에 없으면 전체 기간 최신 판매월
+    if (paidQty === 0) {
+      const rMs = [...DATA_MONTHS].reverse();
+      for (const mk of rMs) {
+        const mPrefix = mk.replace('-', '/');
+        const mTx = tx.filter(t => (t.date || '').startsWith(mPrefix) && (t.amt || 0) > 0);
+        const mQ = mTx.reduce((s, t) => s + (t.qty || 0), 0);
+        const mA = mTx.reduce((s, t) => s + (t.amt || 0), 0);
+        if (mQ > 0) { paidQty = mQ; paidAmt = mA; break; }
+      }
+    }
+    const avgSP = paidQty > 0 ? Math.round(paidAmt / paidQty) : 0;
+
+    // ── 원가율: 수불부 단가 / 판매단가 (대시보드와 동일) ──
+    const cr = avgSP > 0 && uc > 0 ? +(uc / avgSP * 100).toFixed(1) : 0;
+    const margin = cr > 0 ? +(100 - cr).toFixed(1) : 0;
+
+    // ── BOM 자재비 (참고용, 대시보드 bomCR과 동일) ──
     const children = D.bom.filter(b => b.parent_sku === sku);
-    let matCost = 0;
-    children.forEach(ch => { const ci = D.inv.find(x => x.sku_id === ch.child_sku); matCost += (ci ? ci.unit_cost || 0 : 0) * (ch.qty || 1); });
-    const cr = sp > 0 ? Math.round(matCost / sp * 100) : 0;
-    const margin = sp > 0 ? sp - matCost : 0;
+    let bomCost = 0;
+    children.forEach(ch => {
+      let p = 0;
+      const cio = mio[ch.child_sku];
+      if (cio && cio[costRefMk]) {
+        const r = cio[costRefMk];
+        if (r.eq > 0 && r.ea > 0) p = Math.round(r.ea / r.eq);
+        else if (r.iq > 0 && r.ia > 0) p = Math.round(r.ia / r.iq);
+      }
+      if (p <= 0 && cio) {
+        const idx = DATA_MONTHS.indexOf(costRefMk);
+        for (let j = idx - 1; j >= 0; j--) {
+          const pm = DATA_MONTHS[j], rr = cio[pm];
+          if (!rr) continue;
+          if (rr.eq > 0 && rr.ea > 0) { p = Math.round(rr.ea / rr.eq); break; }
+          if (rr.iq > 0 && rr.ia > 0) { p = Math.round(rr.ia / rr.iq); break; }
+        }
+      }
+      if (p <= 0) {
+        const cmP = costRefMk.replace('-', '/');
+        const pur = allPur.find(x => x.sku_id === ch.child_sku && x.price > 0 && (x.date || '') <= cmP + '/31');
+        if (pur) p = pur.price;
+      }
+      if (p <= 0) {
+        const pur = allPur.find(x => x.sku_id === ch.child_sku && x.price > 0);
+        if (pur) p = pur.price;
+        else { const ci = D.inv.find(i => i.sku_id === ch.child_sku); if (ci && ci.qty > 0 && ci.amount > 0) p = Math.round(ci.amount / ci.qty); }
+      }
+      bomCost += p * (ch.qty || 1);
+    });
+    const bomCR = avgSP > 0 && bomCost > 0 ? +(bomCost / avgSP * 100).toFixed(1) : 0;
+
+    // 선택월 매출
     const periodSales = selMs.reduce((s, m) => { const d = (D.isd.find(x => x.sku_id === sku) || {}).monthly; return s + (d && d[m] ? d[m].amt : 0); }, 0);
-    if (sp > 0 || matCost > 0) costItems.push({ sku, name: _nm(sku), sp, matCost, cr, margin, children: children.length, periodSales });
+    if (avgSP > 0 || uc > 0) costItems.push({ sku, name: _nm(sku), uc, avgSP, cr, margin, bomCost, bomCR, children: children.length, periodSales });
   });
   costItems.sort((a, b) => b.cr - a.cr);
-  const avgCR = costItems.length > 0 ? Math.round(costItems.reduce((s, c) => s + c.cr, 0) / costItems.length) : 0;
+  const withCR = costItems.filter(c => c.cr > 0);
+  const avgCR = withCR.length > 0 ? +(withCR.reduce((s, c) => s + c.cr, 0) / withCR.length).toFixed(1) : 0;
   const highCR = costItems.filter(c => c.cr > 70);
-  const totalMargin = costItems.reduce((s, c) => s + c.margin, 0);
+  const totalMargin = withCR.reduce((s, c) => s + (c.avgSP - c.uc), 0);
 
   // ── 발주/공급사 ──
   const allPO = D.po.filter(p => p.vendor !== 'nan' && p.item_name !== 'nan');
@@ -503,10 +584,10 @@ async function _buildReport(setStatus) {
   addTitle(s7, '💹', '원가 분석', `${periodStr} 판매 ${costItems.length}개 품목 | 평균 원가율 ${avgCR}%`);
 
   const crBands = [
-    { label: '~30%', cnt: costItems.filter(c => c.cr > 0 && c.cr <= 30).length },
-    { label: '30~50%', cnt: costItems.filter(c => c.cr > 30 && c.cr <= 50).length },
-    { label: '50~70%', cnt: costItems.filter(c => c.cr > 50 && c.cr <= 70).length },
-    { label: '70%~', cnt: costItems.filter(c => c.cr > 70).length },
+    { label: '~50%', cnt: withCR.filter(c => c.cr <= 50).length },
+    { label: '50~70%', cnt: withCR.filter(c => c.cr > 50 && c.cr <= 70).length },
+    { label: '70~90%', cnt: withCR.filter(c => c.cr > 70 && c.cr < 90).length },
+    { label: '90%↑', cnt: withCR.filter(c => c.cr >= 90).length },
   ];
   s7.addChart(pres.charts.BAR, [{
     name: '품목수', labels: crBands.map(b => b.label), values: crBands.map(b => b.cnt)
@@ -523,10 +604,10 @@ async function _buildReport(setStatus) {
     [{ text: '지표', options: hdrStyle() },
      { text: '값', options: hdrR() }],
     ['분석대상 (판매품목)', { text: costItems.length + '개', options: { align: 'right' } }],
+    ['원가율 산출 기준', { text: '수불부단가/판매단가', options: { align: 'right', fontSize: 9 } }],
     ['평균 원가율', { text: avgCR + '%', options: { align: 'right' } }],
     ['고위험(>70%)', { text: highCR.length + '건', options: { align: 'right', color: C.red, bold: true } }],
-    ['저원가(<30%)', { text: costItems.filter(c => c.cr > 0 && c.cr <= 30).length + '건', options: { align: 'right' } }],
-    ['총 마진합계', { text: _m(totalMargin), options: { align: 'right' } }],
+    ['양호(<50%)', { text: withCR.filter(c => c.cr <= 50).length + '건', options: { align: 'right' } }],
     ['최고 원가율', { text: costItems.length > 0 ? costItems[0].name + ' ' + costItems[0].cr + '%' : '-', options: { align: 'right' } }],
   ], { x: L.splitRx, y: L.bodyY, w: L.splitRw, h: 2.5, fontSize: 10, border: tblBorder, colW: [1.8, 2.15], autoPage: false });
 
@@ -544,21 +625,21 @@ async function _buildReport(setStatus) {
 
   const crRows = costItems.slice(0, 12).map(c => [
     c.name,
-    { text: _f(c.sp), options: { align: 'right' } },
-    { text: _f(c.matCost), options: { align: 'right' } },
+    { text: _f(c.uc), options: { align: 'right' } },
+    { text: _f(c.avgSP), options: { align: 'right' } },
     { text: c.cr + '%', options: { align: 'right', color: c.cr > 70 ? C.red : c.cr > 50 ? C.orange : C.green, bold: c.cr > 70 } },
-    { text: _f(c.margin), options: { align: 'right', color: c.margin < 0 ? C.red : C.dark } },
+    { text: c.margin + '%', options: { align: 'right', color: c.margin < 30 ? C.red : C.dark } },
     { text: _m(c.periodSales), options: { align: 'right' } }
   ]);
   s8.addTable([
     [{ text: '품목명', options: hdrStyle() },
-     { text: '판매가', options: hdrR() },
-     { text: '원가', options: hdrR() },
+     { text: '수불부원가', options: hdrR() },
+     { text: '판매단가', options: hdrR() },
      { text: '원가율', options: hdrR() },
-     { text: '마진', options: hdrR() },
+     { text: '마진율', options: hdrR() },
      { text: '당월매출', options: hdrR() }],
     ...crRows
-  ], { x: L.mx, y: L.bodyY, w: L.tblFull, fontSize: 9.5, border: tblBorder, colW: [2.8, 1.2, 1.2, 1.0, 1.5, 1.5], autoPage: false });
+  ], { x: L.mx, y: L.bodyY, w: L.tblFull, fontSize: 9.5, border: tblBorder, colW: [2.8, 1.2, 1.2, 1.0, 1.0, 2.0], autoPage: false });
 
   // ══════════════════════════════════════════════════════
   // SLIDE 9: ★ 고위험 원가 상세 (>70%) — 신규
@@ -571,21 +652,14 @@ async function _buildReport(setStatus) {
     s9.addText(`${periodStr} 판매 품목 중 ${highCR.length}건`, { x: L.mx, y: L.subY, w: L.tw, h: L.subH, fontSize: 11, color: C.sub });
 
     const hrRows = highCR.slice(0, 10).map((c, i) => {
-      const children = D.bom.filter(b => b.parent_sku === c.sku);
-      const topMat = children.sort((a, b) => {
-        const ca = D.inv.find(x => x.sku_id === a.child_sku);
-        const cb = D.inv.find(x => x.sku_id === b.child_sku);
-        return ((cb ? cb.unit_cost || 0 : 0) * (b.qty || 1)) - ((ca ? ca.unit_cost || 0 : 0) * (a.qty || 1));
-      })[0];
-      const topMatName = topMat ? _nm(topMat.child_sku) : '-';
       return [
         String(i + 1),
         c.name,
         { text: c.cr + '%', options: { align: 'right', color: C.red, bold: true } },
-        { text: _f(c.sp), options: { align: 'right' } },
-        { text: _f(c.matCost), options: { align: 'right' } },
-        { text: _f(c.margin), options: { align: 'right', color: c.margin < 0 ? C.red : C.dark } },
-        topMatName
+        { text: _f(c.uc), options: { align: 'right' } },
+        { text: _f(c.avgSP), options: { align: 'right' } },
+        { text: c.margin + '%', options: { align: 'right', color: parseFloat(c.margin) < 30 ? C.red : C.dark } },
+        { text: c.bomCR + '%', options: { align: 'right', color: c.bomCR > 70 ? C.orange : C.sub } }
       ];
     });
 
@@ -593,12 +667,12 @@ async function _buildReport(setStatus) {
       [{ text: '#', options: hdrStyle(C.red) },
        { text: '품목명', options: hdrStyle(C.red) },
        { text: '원가율', options: hdrR(C.red) },
-       { text: '판매가', options: hdrR(C.red) },
-       { text: '원가', options: hdrR(C.red) },
-       { text: '마진', options: hdrR(C.red) },
-       { text: '최대 원가 자재', options: hdrStyle(C.red) }],
+       { text: '수불부원가', options: hdrR(C.red) },
+       { text: '판매단가', options: hdrR(C.red) },
+       { text: '마진율', options: hdrR(C.red) },
+       { text: 'BOM원가율', options: hdrR(C.red) }],
       ...hrRows
-    ], { x: L.mx, y: L.bodyY, w: L.tblFull, fontSize: 9, border: tblBorder, colW: [0.35, 2.3, 0.8, 1.1, 1.1, 1.1, 2.45], autoPage: false });
+    ], { x: L.mx, y: L.bodyY, w: L.tblFull, fontSize: 9, border: tblBorder, colW: [0.35, 2.65, 0.8, 1.2, 1.2, 0.9, 2.1], autoPage: false });
 
     const hrTblEnd = L.bodyY + (hrRows.length + 1) * 0.3 + 0.15;
     addInsights(s9, [
