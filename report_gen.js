@@ -31,8 +31,8 @@ async function generateReport() {
 async function _buildReport(setStatus) {
   const pres = new PptxGenJS();
   pres.layout = 'LAYOUT_16x9';
-  pres.author = 'BeaverWorks SCM';
-  pres.title = 'BeaverWorks SCM 주간 경영보고서';
+  pres.author = 'BeaverWorks';
+  pres.title = 'BeaverWorks 주간 경영보고서';
 
   // ═══ 통일 색상 ═══
   const C = {
@@ -248,6 +248,8 @@ async function _buildReport(setStatus) {
       const tPrefix = (t.date || '').substring(0, 7);
       if (selPrefixes.some(p => tPrefix === p)) { paidQty += t.qty || 0; paidAmt += t.amt || 0; }
     });
+    // ★ 구독렌탈 제외 판매수량 (선택월 한정, fallback 전)
+    const paidPeriodQty = paidQty;
     // fallback: 선택월에 없으면 전체 기간 최신 판매월
     if (paidQty === 0) {
       const rMs = [...DATA_MONTHS].reverse();
@@ -303,7 +305,7 @@ async function _buildReport(setStatus) {
     const isdItem = D.isd.find(x => x.sku_id === sku);
     const periodSales = selMs.reduce((s, m) => { const d = isdItem ? isdItem.monthly : null; return s + (d && d[m] ? d[m].amt : 0); }, 0);
     const periodQty = selMs.reduce((s, m) => { const d = isdItem ? isdItem.monthly : null; return s + (d && d[m] ? d[m].qty : 0); }, 0);
-    if (avgSP > 0 || uc > 0) costItems.push({ sku, name: _nm(sku), uc, avgSP, cr, margin, bomCost, bomCR, children: children.length, periodSales, periodQty });
+    if (avgSP > 0 || uc > 0) costItems.push({ sku, name: _nm(sku), uc, avgSP, cr, margin, bomCost, bomCR, children: children.length, periodSales, periodQty, paidPeriodQty });
   });
   costItems.sort((a, b) => b.cr - a.cr);
   const withCR = costItems.filter(c => c.cr > 0);
@@ -383,6 +385,22 @@ async function _buildReport(setStatus) {
   const taMonthly = {};
   taMs.forEach(m => { taMonthly[m] = taYr.filter(t => (t.d || '').substring(5, 7) === m.slice(5)).reduce((s, t) => s + (t.a || 0), 0); });
 
+  // ★ 계정별 월별 집계 (타계정 스택차트용)
+  const taAcctMonthly = {};
+  taYr.forEach(t => {
+    const ac = t.ac || '(미분류)';
+    const mm = (t.d || '').substring(5, 7);
+    const mk = yr + '-' + mm;
+    if (!taMs.includes(mk)) return;
+    if (!taAcctMonthly[ac]) taAcctMonthly[ac] = {};
+    taAcctMonthly[ac][mk] = (taAcctMonthly[ac][mk] || 0) + (t.a || 0);
+  });
+  const taAcctTotals = {};
+  Object.entries(taAcctMonthly).forEach(([ac, months]) => {
+    taAcctTotals[ac] = Object.values(months).reduce((s, v) => s + v, 0);
+  });
+  const topTaAccts = Object.entries(taAcctTotals).sort((a, b) => b[1] - a[1]).slice(0, 8);
+
   setStatus('슬라이드 생성...', 10);
 
   // ══════════════════════════════════════════════════════
@@ -392,11 +410,11 @@ async function _buildReport(setStatus) {
   const s1 = pres.addSlide();
   s1.background = { color: C.navy };
   s1.addText('BeaverWorks', { x: 0.8, y: 1.2, w: 8.5, h: 0.9, fontSize: 48, fontFace: 'Arial Black', color: C.white, bold: true });
-  s1.addText('SCM 주간 경영보고서', { x: 0.8, y: 2.1, w: 8.5, h: 0.6, fontSize: 28, color: C.ice });
+  s1.addText('주간 경영보고서', { x: 0.8, y: 2.1, w: 8.5, h: 0.6, fontSize: 28, color: C.ice });
   s1.addShape(pres.shapes.RECTANGLE, { x: 0.8, y: 2.85, w: 3.0, h: 0.04, fill: { color: C.accent } });
   s1.addText(`보고 기간: ${periodStr}${prevPeriodStr ? ' (비교: ' + prevPeriodStr + ')' : ''}`, { x: 0.8, y: 3.1, w: 8, h: 0.4, fontSize: 14, color: C.gray });
   s1.addText(`생성일: ${reportDate}`, { x: 0.8, y: 3.5, w: 5, h: 0.4, fontSize: 12, color: C.gray });
-  s1.addText('비버웍스 공급망관리 시스템 | 자동생성 보고서', { x: 0.8, y: 4.6, w: 6, h: 0.4, fontSize: 11, color: C.gray });
+  s1.addText('비버웍스 통합관리 시스템 | 자동생성 보고서', { x: 0.8, y: 4.6, w: 6, h: 0.4, fontSize: 11, color: C.gray });
 
   // ══════════════════════════════════════════════════════
   // SLIDE 2: Executive Summary
@@ -626,29 +644,28 @@ async function _buildReport(setStatus) {
   addTitle(s8, '💹', `원가 상세 — ${periodStr} 판매 품목`, '원가율 높은 순');
 
   const crRows = costItems.slice(0, 12).map(c => {
-    const diffPct = c.cr > 0 && c.bomCR > 0 ? +(c.bomCR - c.cr).toFixed(1) : 0;
+    const diffAmt = c.uc > 0 && c.bomCost > 0 ? c.uc - c.bomCost : 0;
     return [
       c.name,
       { text: _f(c.uc), options: { align: 'right' } },
-      { text: _f(c.avgSP), options: { align: 'right' } },
       { text: c.cr + '%', options: { align: 'right', color: c.cr > 70 ? C.red : c.cr > 50 ? C.orange : C.green, bold: c.cr > 70 } },
-      { text: c.bomCR + '%', options: { align: 'right', color: c.bomCR > 70 ? C.red : c.bomCR > 50 ? C.orange : C.green } },
-      { text: (diffPct >= 0 ? '+' : '') + diffPct + '%p', options: { align: 'right', color: Math.abs(diffPct) > 15 ? C.orange : C.sub, fontSize: 8 } },
-      { text: _f(c.periodQty), options: { align: 'right' } },
-      { text: _m(c.periodSales), options: { align: 'right' } }
+      { text: _f(c.bomCost), options: { align: 'right' } },
+      { text: (diffAmt >= 0 ? '+' : '') + _f(diffAmt), options: { align: 'right', color: diffAmt < 0 ? C.orange : C.sub, fontSize: 8.5 } },
+      { text: _f(c.paidPeriodQty), options: { align: 'right' } },
+      { text: _f(c.avgSP), options: { align: 'right' } }
     ];
   });
   s8.addTable([
     [{ text: '품목명', options: hdrStyle() },
      { text: '수불부원가', options: hdrR() },
-     { text: '판매단가', options: hdrR() },
      { text: '원가율', options: hdrR() },
-     { text: 'BOM원가율', options: hdrR() },
+     { text: 'BOM원가', options: hdrR() },
      { text: '차이', options: hdrR() },
-     { text: '수량', options: hdrR() },
-     { text: '매출', options: hdrR() }],
+     { text: '수량*', options: hdrR() },
+     { text: '평균판매단가', options: hdrR() }],
     ...crRows
-  ], { x: L.mx, y: L.bodyY, w: L.tblFull, fontSize: 8.5, border: tblBorder, colW: [2.2, 1.0, 1.0, 0.85, 0.95, 0.7, 0.7, 1.8], autoPage: false });
+  ], { x: L.mx, y: L.bodyY, w: L.tblFull, fontSize: 8.5, border: tblBorder, colW: [2.4, 1.1, 0.85, 1.1, 1.0, 0.85, 1.9], autoPage: false });
+  s8.addText('* 수량: 구독/렌탈 제외 판매수량 | 차이: 수불부원가 − BOM원가', { x: L.mx, y: L.bodyY - 0.15, w: L.tw, h: 0.2, fontSize: 7.5, color: C.gray, italic: true, align: 'right', margin: 0 });
 
   // ══════════════════════════════════════════════════════
   // SLIDE 9: ★ 고위험 원가 상세 (>70%) — 신규
@@ -668,7 +685,7 @@ async function _buildReport(setStatus) {
         { text: _f(c.uc), options: { align: 'right' } },
         { text: _f(c.avgSP), options: { align: 'right' } },
         { text: c.margin + '%', options: { align: 'right', color: parseFloat(c.margin) < 30 ? C.red : C.dark } },
-        { text: c.bomCR + '%', options: { align: 'right', color: c.bomCR > 70 ? C.orange : C.sub } }
+        { text: _f(c.bomCost), options: { align: 'right' } }
       ];
     });
 
@@ -677,11 +694,11 @@ async function _buildReport(setStatus) {
        { text: '품목명', options: hdrStyle(C.red) },
        { text: '원가율', options: hdrR(C.red) },
        { text: '수불부원가', options: hdrR(C.red) },
-       { text: '판매단가', options: hdrR(C.red) },
+       { text: '평균판매단가', options: hdrR(C.red) },
        { text: '마진율', options: hdrR(C.red) },
-       { text: 'BOM원가율', options: hdrR(C.red) }],
+       { text: 'BOM원가', options: hdrR(C.red) }],
       ...hrRows
-    ], { x: L.mx, y: L.bodyY, w: L.tblFull, fontSize: 9, border: tblBorder, colW: [0.35, 2.65, 0.8, 1.2, 1.2, 0.9, 2.1], autoPage: false });
+    ], { x: L.mx, y: L.bodyY, w: L.tblFull, fontSize: 9, border: tblBorder, colW: [0.35, 2.45, 0.8, 1.2, 1.2, 0.9, 2.3], autoPage: false });
 
     const hrTblEnd = L.bodyY + (hrRows.length + 1) * 0.3 + 0.15;
     addInsights(s9, [
@@ -770,14 +787,19 @@ async function _buildReport(setStatus) {
   addTitle(sTa, '📑', '타계정 내역', `${periodStr} ${_m(taTotal)} / ${_f(taQty)}건 (${yr}년 누계 ${_m(taYrTotal)})`);
 
   const taLabels = Object.keys(taMonthly).map(m => m.slice(5) + '월');
-  const taValues = Object.values(taMonthly).map(v => Math.round(v / 1e6 * 100) / 100);
-  if (taLabels.length > 1) {
-    sTa.addChart(pres.charts.BAR, [{
-      name: '타계정(백만)', labels: taLabels, values: taValues
-    }], {
+  const taChartColors = ['2563EB', '0E7490', '7E22CE', 'C2410C', '15803D', '92400E', 'DC2626', '475569'];
+  if (taLabels.length > 1 && topTaAccts.length > 0) {
+    const taDataSets = topTaAccts.map(([ac, _]) => ({
+      name: ac.length > 10 ? ac.slice(0, 10) + '..' : ac,
+      labels: taLabels,
+      values: taMs.map(m => Math.round((taAcctMonthly[ac][m] || 0) / 1e6 * 100) / 100)
+    }));
+    sTa.addChart(pres.charts.BAR, taDataSets, {
       x: L.mx, y: L.bodyY, w: L.splitL, h: 3.0, barDir: 'col',
-      showTitle: true, title: '월별 타계정 추이', titleColor: C.sub, titleFontSize: 10,
-      chartColors: [C.orange], showValue: true, dataLabelPosition: 'outEnd', dataLabelColor: C.dark, dataLabelFontSize: 9,
+      barGrouping: 'stacked',
+      showTitle: true, title: '계정별 월별 추이', titleColor: C.sub, titleFontSize: 10,
+      chartColors: taChartColors.slice(0, topTaAccts.length),
+      showLegend: true, legendPos: 'b', legendFontSize: 7,
       valGridLine: { color: 'E2E8F0', size: 0.5 }, catGridLine: { style: 'none' },
       catAxisLabelColor: C.gray, valAxisLabelColor: C.gray
     });
@@ -849,7 +871,7 @@ async function _buildReport(setStatus) {
   // SAVE
   // ══════════════════════════════════════════════════════
   setStatus('저장 중...', 98);
-  const fileName = `BW_SCM_Weekly_${yr}${S.selMonth === 'all' ? '' : '_' + S.selMonth}_${reportDate.replace(/-/g, '')}.pptx`;
+  const fileName = `BW_Weekly_${yr}${S.selMonth === 'all' ? '' : '_' + S.selMonth}_${reportDate.replace(/-/g, '')}.pptx`;
   await pres.writeFile({ fileName });
   setStatus('완료!', 100);
 }
