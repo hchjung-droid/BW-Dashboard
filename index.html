@@ -2908,7 +2908,7 @@ async function _buildSalesInsight(st){
   const prevAvgPrice=prevTxQty>0?Math.round(prevTxAmt/prevTxQty):0;
 
   // Top items — ★ 전월 비교
-  const itemRank=D.isd.map(i=>({name:i.name,sku:i.sku_id,type:i.type,amt:selMs.reduce((s,m)=>s+(i.monthly[m]?i.monthly[m].amt:0),0),qty:selMs.reduce((s,m)=>s+(i.monthly[m]?i.monthly[m].qty:0),0),prevAmt:prevMs.reduce((s,m)=>s+(i.monthly[m]?i.monthly[m].amt:0),0)})).filter(r=>r.amt>0).sort((a,b)=>b.amt-a.amt);
+  const itemRank=D.isd.map(i=>({name:i.name,sku_id:i.sku_id,type:i.type,amt:selMs.reduce((s,m)=>s+(i.monthly[m]?i.monthly[m].amt:0),0),qty:selMs.reduce((s,m)=>s+(i.monthly[m]?i.monthly[m].qty:0),0),prevAmt:prevMs.reduce((s,m)=>s+(i.monthly[m]?i.monthly[m].amt:0),0)})).filter(r=>r.amt>0).sort((a,b)=>b.amt-a.amt);
 
   // Customer data — ★ 전월 비교
   const custRank=D.csd.map(c=>({name:c.name,amt:selMs.reduce((s,m)=>s+(c.monthly[m]?c.monthly[m].amt:0),0),qty:selMs.reduce((s,m)=>s+(c.monthly[m]?c.monthly[m].qty:0),0),prevAmt:prevMs.reduce((s,m)=>s+(c.monthly[m]?c.monthly[m].amt:0),0)})).filter(r=>r.amt>0).sort((a,b)=>b.amt-a.amt);
@@ -3014,12 +3014,12 @@ async function _buildSalesInsight(st){
   const top10i=itemRank.slice(0,10);
   const top10iAmt=top10i.reduce((s,r)=>s+r.amt,0);
   const top10iShare=(top10iAmt/selTotal*100).toFixed(1);
-  // colW합=9.2: 0.3+4.5+0.4+0.8+1.0+0.7+1.5=9.2
+  // colW합=9.2: 0.4+3.8+0.9+0.8+1.0+0.7+1.6=9.2
   const iRows=[[{text:'#',options:hdr()},{text:'품목명',options:hdr()},{text:'유형',options:hdr()},{text:'수량',options:hdrR()},{text:'매출',options:hdrR()},{text:'비중',options:hdrR()},{text:'전월비',options:hdrR()}],
-    ...top10i.map((r,i)=>[{text:String(i+1),options:{fontSize:7.5}},{text:r.name,options:{fontSize:7}},{text:r.type||'',options:{fontSize:7,align:'center'}},{text:_f(r.qty),options:{align:'right',fontSize:7.5}},{text:_m(r.amt),options:{align:'right',fontSize:7.5,bold:true}},{text:(r.amt/selTotal*100).toFixed(1)+'%',options:{align:'right',fontSize:7.5}},{text:r.prevAmt>0?_chg(r.amt,r.prevAmt):'-',options:{align:'right',fontSize:7.5,color:r.amt>=r.prevAmt?C.green:C.red}}]),
+    ...top10i.map((r,i)=>[{text:String(i+1),options:{fontSize:7.5,align:'center'}},{text:r.name,options:{fontSize:7}},{text:r.type||'',options:{fontSize:7,align:'center'}},{text:_f(r.qty),options:{align:'right',fontSize:7.5}},{text:_m(r.amt),options:{align:'right',fontSize:7.5,bold:true}},{text:(r.amt/selTotal*100).toFixed(1)+'%',options:{align:'right',fontSize:7.5}},{text:r.prevAmt>0?_chg(r.amt,r.prevAmt):'-',options:{align:'right',fontSize:7.5,color:r.amt>=r.prevAmt?C.green:C.red}}]),
     [{text:'',options:{fontSize:7.5}},{text:'TOP10 합계',options:{fontSize:7.5,bold:true}},{text:'BOM원가율',options:{fontSize:7,align:'center',bold:true,color:C.accent}},{text:_f(top10i.reduce((s,r)=>s+r.qty,0)),options:{align:'right',fontSize:7.5,bold:true}},{text:_m(top10iAmt),options:{align:'right',fontSize:7.5,bold:true}},{text:top10iShare+'%',options:{align:'right',fontSize:7.5,bold:true}},{text:top10BomCR,options:{align:'right',fontSize:7.5,bold:true,color:C.accent}}]
   ];
-  s3.addTable(iRows,{x:L.mx,y:L.bodyY,w:L.tw,border:tblBorder,colW:[0.3,4.5,0.4,0.8,1.0,0.7,1.5],rowH:0.27,autoPage:false});
+  s3.addTable(iRows,{x:L.mx,y:L.bodyY,w:L.tw,border:tblBorder,colW:[0.4,3.8,0.9,0.8,1.0,0.7,1.6],rowH:0.27,autoPage:false});
   const ins3=[];
   ins3.push(`TOP10 점유율 ${top10iShare}%, BOM 원가율 ${top10BomCR}`);
   ins3.push(`매출 1위: ${top10i[0].name} (${_m(top10i[0].amt)}, ${(top10i[0].amt/selTotal*100).toFixed(1)}%)`);
@@ -3038,11 +3038,11 @@ async function _buildSalesInsight(st){
   const top10c=custRank.slice(0,10);
   const top10cAmt=top10c.reduce((s,c)=>s+c.amt,0);
   const cRows=[[{text:'#',options:hdr()},{text:'거래처',options:hdr()},{text:'수량',options:hdrR()},{text:'매출',options:hdrR()},{text:'비중',options:hdrR()},{text:'전월비',options:hdrR()}],
-    ...top10c.map((c,i)=>[{text:String(i+1),options:{fontSize:9}},{text:c.name,options:{fontSize:8}},{text:_f(c.qty),options:{align:'right',fontSize:9}},{text:_m(c.amt),options:{align:'right',fontSize:9,bold:true}},{text:(c.amt/custTotal*100).toFixed(1)+'%',options:{align:'right',fontSize:9}},{text:c.prevAmt>0?_chg(c.amt,c.prevAmt):'-',options:{align:'right',fontSize:9,color:c.amt>=c.prevAmt?C.green:C.red}}]),
+    ...top10c.map((c,i)=>[{text:String(i+1),options:{fontSize:9,align:'center'}},{text:c.name,options:{fontSize:8}},{text:_f(c.qty),options:{align:'right',fontSize:9}},{text:_m(c.amt),options:{align:'right',fontSize:9,bold:true}},{text:(c.amt/custTotal*100).toFixed(1)+'%',options:{align:'right',fontSize:9}},{text:c.prevAmt>0?_chg(c.amt,c.prevAmt):'-',options:{align:'right',fontSize:9,color:c.amt>=c.prevAmt?C.green:C.red}}]),
     [{text:'',options:{fontSize:9}},{text:'TOP 10 합계',options:{fontSize:9,bold:true}},{text:_f(top10c.reduce((s,c)=>s+c.qty,0)),options:{align:'right',fontSize:9,bold:true}},{text:_m(top10cAmt),options:{align:'right',fontSize:9,bold:true}},{text:(top10cAmt/custTotal*100).toFixed(1)+'%',options:{align:'right',fontSize:9,bold:true}},{text:'',options:{fontSize:9}}]
   ];
-  // colW합=9.2: 0.3+4.3+0.9+1.2+0.9+1.6=9.2
-  s4.addTable(cRows,{x:L.mx,y:L.bodyY,w:L.tw,border:tblBorder,colW:[0.3,4.3,0.9,1.2,0.9,1.6],rowH:0.26,autoPage:false});
+  // colW합=9.2: 0.4+4.2+0.9+1.2+0.9+1.6=9.2
+  s4.addTable(cRows,{x:L.mx,y:L.bodyY,w:L.tw,border:tblBorder,colW:[0.4,4.2,0.9,1.2,0.9,1.6],rowH:0.26,autoPage:false});
   const ins4=[];
   ins4.push(`총 거래처 수 ${custRank.length}개사, TOP10 비중 ${(top10cAmt/custTotal*100).toFixed(1)}%, TOP5 비중 ${(top5CustAmt/custTotal*100).toFixed(1)}% (${top5CustAmt/custTotal>0.5?'⚠️ 매출 쏠림 주의':'균형 양호'})`);
   ins4.push(`최대 거래처: ${top10c[0].name} (${_m(top10c[0].amt)}, ${(top10c[0].amt/custTotal*100).toFixed(1)}%)`);
@@ -3051,6 +3051,40 @@ async function _buildSalesInsight(st){
   const cDec=top10c.filter(c=>c.prevAmt>0&&c.amt<c.prevAmt*0.9);
   if(cDec.length>0)ins4.push(`감소 거래처: ${cDec.slice(0,3).map(c=>c.name).join(', ')} (전월대비 10%+ 감소)`);
   addInsights(s4,ins4);
+
+  st('품목-거래처 분석...',55);
+
+  // ════════════════════════════════════════
+  // SLIDE 5: 품목별 거래처 현황 (★ 크로스분석)
+  // ════════════════════════════════════════
+  const sXC=pres.addSlide();addTitle(sXC,'📊','품목별 주요 거래처 현황 (TOP 7)',periodStr);
+  const txBySIC={};
+  (D.sales_tx||[]).forEach(tx=>{
+    const txM=tx.date?tx.date.substring(0,7).replace('/','-'):'';
+    if(!selMs.includes(txM))return;
+    const k=tx.sku_id+'||'+(tx.cust||'');
+    if(!txBySIC[k])txBySIC[k]={sku_id:tx.sku_id,cust:tx.cust||'',qty:0,amt:0};
+    txBySIC[k].qty+=(tx.qty||0);txBySIC[k].amt+=(tx.amt||0);
+  });
+  const top7IC=itemRank.slice(0,7);
+  const icData=top7IC.map(item=>{
+    const ces=Object.values(txBySIC).filter(e=>e.sku_id===item.sku_id).sort((a,b)=>b.amt-a.amt);
+    return {name:item.name,amt:item.amt,cc:ces.length,c1:ces[0]||null,c2:ces[1]||null};
+  });
+  // colW합=9.2: 0.3+2.4+0.8+2.0+0.8+2.0+0.9=9.2
+  const icRows=[[{text:'#',options:hdr()},{text:'품목명',options:hdr()},{text:'총매출',options:hdrR()},{text:'1위 거래처',options:hdr()},{text:'금액',options:hdrR()},{text:'2위 거래처',options:hdr()},{text:'금액',options:hdrR()}],
+    ...icData.map((r,i)=>[{text:String(i+1),options:{fontSize:7.5,align:'center'}},{text:r.name,options:{fontSize:6.5}},{text:_m(r.amt),options:{align:'right',fontSize:7.5,bold:true}},{text:r.c1?r.c1.cust:'-',options:{fontSize:6.5}},{text:r.c1?_m(r.c1.amt):'-',options:{align:'right',fontSize:7.5}},{text:r.c2?r.c2.cust:'-',options:{fontSize:6.5}},{text:r.c2?_m(r.c2.amt):'-',options:{align:'right',fontSize:7.5}}])
+  ];
+  sXC.addTable(icRows,{x:L.mx,y:L.bodyY,w:L.tw,border:tblBorder,colW:[0.3,2.4,0.8,2.0,0.8,2.0,0.9],rowH:0.27,autoPage:false});
+  const insXC=[];
+  const concI=icData.filter(r=>r.c1&&r.amt>0).map(r=>({n:r.name,c:r.c1.cust,p:Math.round(r.c1.amt/r.amt*100)})).sort((a,b)=>b.p-a.p);
+  if(concI.length>0)insXC.push(`최대 쏠림: ${concI[0].n} → ${concI[0].c} (매출의 ${concI[0].p}%)`);
+  const cfq={};icData.forEach(r=>{if(r.c1)cfq[r.c1.cust]=(cfq[r.c1.cust]||0)+1;if(r.c2)cfq[r.c2.cust]=(cfq[r.c2.cust]||0)+1});
+  const topCF=Object.entries(cfq).sort((a,b)=>b[1]-a[1]);
+  if(topCF.length>0)insXC.push(`다빈도 구매 거래처: ${topCF[0][0]} (TOP7 중 ${topCF[0][1]}개 품목 구매)`);
+  const avgCC=icData.length>0?Math.round(icData.reduce((s,r)=>s+r.cc,0)/icData.length):0;
+  insXC.push(`TOP7 품목 평균 거래처 수: ${avgCC}개사`);
+  addInsights(sXC,insXC);
 
   st('대분류 분석...',60);
 
@@ -3140,6 +3174,7 @@ async function _buildSalesInsight(st){
   summary.push({text:`▸ 매출 현황: ${periodStr} 총 ${_m(selTotal)}${prevTotal>0?` (전월대비 ${_chg(selTotal,prevTotal)})`:''} — 제품매출 ${_m(cTotal)} (${(cTotal/selTotal*100).toFixed(0)}%) / 상품매출 ${_m(bTotal)} (${(bTotal/selTotal*100).toFixed(0)}%)`,options:{fontSize:11,breakLine:true,paraSpaceAfter:6}});
   summary.push({text:`▸ 평균판매단가: ${_f(avgPrice)}원 (구독렌탈 제외)${prevAvgPrice>0?' / 전월 '+_f(prevAvgPrice)+'원 대비 '+_chg(avgPrice,prevAvgPrice):''}`,options:{fontSize:11,breakLine:true,paraSpaceAfter:6}});
   summary.push({text:`▸ 핵심 품목: TOP10 점유율 ${top10iShare}%, BOM 원가율 ${top10BomCR}, 1위 ${itemRank[0]?.name||'-'}`,options:{fontSize:11,breakLine:true,paraSpaceAfter:6}});
+  if(concI.length>0)summary.push({text:`▸ 품목-거래처: 최대 쏠림 ${concI[0].n} → ${concI[0].c}(${concI[0].p}%)`,options:{fontSize:11,breakLine:true,paraSpaceAfter:6}});
   summary.push({text:`▸ 대분류: 1위 ${topCats[0]?.catNm||'-'}(${topCats[0]?.prefix||''}) ${_m(topCats[0]?.amt||0)}, 제품 ${cCats.length}개/원재료 ${bCats.length}개 분류`,options:{fontSize:11,breakLine:true,paraSpaceAfter:6}});
   summary.push({text:`▸ 거래처: ${custRank.length}개사, TOP10 비중 ${(top10cAmt/custTotal*100).toFixed(0)}%, TOP5 비중 ${(top5CustAmt/custTotal*100).toFixed(0)}%${top5CustAmt/custTotal>0.5?' (쏠림 주의)':''}`,options:{fontSize:11,breakLine:true,paraSpaceAfter:6}});
   if(latestChurn){
@@ -5680,7 +5715,7 @@ function renderCharts(){
           datasets:[{label:isAmtC?'매출액':'수량',data:catListC.map(c=>isAmtC?c.amt:c.qty),backgroundColor:catColorsC,borderRadius:4}]
         },options:{...o,indexAxis:'y',plugins:{...o.plugins,legend:{display:false}},
           scales:{x:{ticks:{color:TC,font:{size:9},callback:v=>isAmtC?fmtM(v):fmt(v)},grid:{color:'rgba(255,255,255,.06)'}},
-            y:{ticks:{color:TC,font:{size:9}},grid:{display:false}}}}}));
+            y:{ticks:{color:TC,font:{size:9}},grid:{display:false}}}},plugins:[{id:'catLbl',afterDatasetsDraw(chart){const ctx=chart.ctx;chart.data.datasets.forEach((ds,di)=>{chart.getDatasetMeta(di).data.forEach((el,idx)=>{const v=ds.data[idx];if(!v)return;const lbl=isAmtC?fmtM(v):fmt(v);ctx.save();ctx.font='bold 10px sans-serif';const tw=ctx.measureText(lbl).width;const bw=el.x-el.base;if(bw>tw+12){ctx.fillStyle='#fff';ctx.textAlign='right';ctx.textBaseline='middle';ctx.fillText(lbl,el.x-4,el.y)}else{ctx.fillStyle=TC;ctx.textAlign='left';ctx.textBaseline='middle';ctx.fillText(lbl,el.x+4,el.y)}ctx.restore()})})}}]}));
       }
     }
   }
