@@ -3082,7 +3082,7 @@ async function _buildSalesInsight(st){
   const icRows=[[{text:'#',options:hdr()},{text:'품목명',options:hdr()},{text:'매출',options:hdrR()},{text:'주요 거래처 (5M 이상 개별 / 미만 기타 합산)',options:hdr()}],
     ...icData.map((r,i)=>[{text:String(i+1),options:{fontSize:7.5,align:'center'}},{text:r.name,options:{fontSize:6.5}},{text:_m(r.amt),options:{align:'right',fontSize:7.5,bold:true}},{text:r.custText,options:{fontSize:6}}])
   ];
-  sXC.addTable(icRows,{x:L.mx,y:L.bodyY,w:L.tw,border:tblBorder,colW:[0.3,2.8,0.7,5.4],rowH:0.25,autoPage:false});
+  sXC.addTable(icRows,{x:L.mx,y:L.bodyY,w:L.tw,border:tblBorder,colW:[0.4,2.8,0.7,5.3],rowH:0.25,autoPage:false});
   const insXC=[];
   const concI=icData.filter(r=>r.c1&&r.amt>0).map(r=>({n:r.name,c:r.c1.cust,p:Math.round(r.c1.amt/r.amt*100)})).sort((a,b)=>b.p-a.p);
   if(concI.length>0)insXC.push(`최대 쏠림: ${concI[0].n} → ${concI[0].c} (매출의 ${concI[0].p}%)`);
@@ -3118,7 +3118,7 @@ async function _buildSalesInsight(st){
     const catRows=[[{text:'#',options:hdr()},{text:'구분',options:hdr()},{text:'대분류',options:hdr()},{text:'품목수',options:hdrR()},{text:'수량',options:hdrR()},{text:'매출',options:hdrR()},{text:'비중',options:hdrR()},{text:'전월비',options:hdrR()}],
       ...topCats.map((c,i)=>[{text:String(i+1),options:{fontSize:8}},{text:c.prefix==='C'?'제품':'원재료',options:{fontSize:8,align:'center'}},{text:c.catNm,options:{fontSize:8}},{text:String(c.items),options:{align:'right',fontSize:8}},{text:_f(c.qty),options:{align:'right',fontSize:8}},{text:_m(c.amt),options:{align:'right',fontSize:8,bold:true}},{text:(c.amt/catTotal*100).toFixed(1)+'%',options:{align:'right',fontSize:8}},{text:c.prevAmt>0?_chg(c.amt,c.prevAmt):'-',options:{align:'right',fontSize:8,color:c.amt>=c.prevAmt?C.green:C.red}}])];
     // colW합=9.2: 0.3+0.8+1.9+0.7+0.9+1.4+0.9+2.3=9.2
-    s5.addTable(catRows,{x:L.mx,y:L.bodyY,w:L.tw,border:tblBorder,colW:[0.3,0.8,1.9,0.7,0.9,1.4,0.9,2.3],rowH:0.27,autoPage:false});
+    s5.addTable(catRows,{x:L.mx,y:L.bodyY,w:L.tw,border:tblBorder,colW:[0.4,0.8,1.9,0.7,0.9,1.4,0.9,2.2],rowH:0.27,autoPage:false});
   }
   const ins5c=[];
   ins5c.push(`총 ${catRank.length}개 대분류, 매출 1위: ${topCats[0]?.catNm||'-'} (${topCats[0]?topCats[0].prefix==='C'?'제품':'원재료':''}, ${_m(topCats[0]?.amt||0)}, ${(topCats[0]?(topCats[0].amt/catTotal*100):0).toFixed(1)}%)`);
