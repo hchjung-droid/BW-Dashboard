@@ -3078,11 +3078,11 @@ async function _buildSalesInsight(st){
     if(!custText)custText='-';
     return {name:item.name,amt:item.amt,custText,cc:ces.length,c1:ces[0]||null};
   });
-  // colW합=9.2: 0.3+2.2+0.8+5.9=9.2
+  // colW합=9.2: 0.3+2.8+0.7+5.4=9.2
   const icRows=[[{text:'#',options:hdr()},{text:'품목명',options:hdr()},{text:'매출',options:hdrR()},{text:'주요 거래처 (5M 이상 개별 / 미만 기타 합산)',options:hdr()}],
     ...icData.map((r,i)=>[{text:String(i+1),options:{fontSize:7.5,align:'center'}},{text:r.name,options:{fontSize:6.5}},{text:_m(r.amt),options:{align:'right',fontSize:7.5,bold:true}},{text:r.custText,options:{fontSize:6}}])
   ];
-  sXC.addTable(icRows,{x:L.mx,y:L.bodyY,w:L.tw,border:tblBorder,colW:[0.3,2.2,0.8,5.9],rowH:0.25,autoPage:false});
+  sXC.addTable(icRows,{x:L.mx,y:L.bodyY,w:L.tw,border:tblBorder,colW:[0.3,2.8,0.7,5.4],rowH:0.25,autoPage:false});
   const insXC=[];
   const concI=icData.filter(r=>r.c1&&r.amt>0).map(r=>({n:r.name,c:r.c1.cust,p:Math.round(r.c1.amt/r.amt*100)})).sort((a,b)=>b.p-a.p);
   if(concI.length>0)insXC.push(`최대 쏠림: ${concI[0].n} → ${concI[0].c} (매출의 ${concI[0].p}%)`);
