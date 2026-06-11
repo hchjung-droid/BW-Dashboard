@@ -3079,8 +3079,10 @@ async function _buildSalesInsight(st){
     return {name:item.name,amt:item.amt,custText,cc:ces.length,c1:ces[0]||null};
   });
   // colW합=9.2: 0.3+2.8+0.7+5.4=9.2
+  const icTotalAmt=icData.reduce((s,r)=>s+r.amt,0);
   const icRows=[[{text:'#',options:hdr()},{text:'품목명',options:hdr()},{text:'매출',options:hdrR()},{text:'주요 거래처 (5M 이상 개별 / 미만 기타 합산)',options:hdr()}],
-    ...icData.map((r,i)=>[{text:String(i+1),options:{fontSize:7.5,align:'center'}},{text:r.name,options:{fontSize:6.5}},{text:_m(r.amt),options:{align:'right',fontSize:7.5,bold:true}},{text:r.custText,options:{fontSize:6}}])
+    ...icData.map((r,i)=>[{text:String(i+1),options:{fontSize:7.5,align:'center'}},{text:r.name,options:{fontSize:6.5}},{text:_m(r.amt),options:{align:'right',fontSize:7.5,bold:true}},{text:r.custText,options:{fontSize:6}}]),
+    [{text:'',options:{fontSize:7.5}},{text:'TOP10 합계 (비중 '+(selTotal>0?(icTotalAmt/selTotal*100).toFixed(1):0)+'%)',options:{fontSize:7.5,bold:true}},{text:_m(icTotalAmt),options:{align:'right',fontSize:7.5,bold:true}},{text:'',options:{fontSize:6}}]
   ];
   sXC.addTable(icRows,{x:L.mx,y:L.bodyY,w:L.tw,border:tblBorder,colW:[0.4,2.8,0.7,5.3],rowH:0.25,autoPage:false});
   const insXC=[];
@@ -3115,8 +3117,10 @@ async function _buildSalesInsight(st){
   // 상위 10개 대분류만
   const topCats=catRank.slice(0,10);
   if(topCats.length>0){
+    const topCatAmt=topCats.reduce((s,c)=>s+c.amt,0);const topCatQty=topCats.reduce((s,c)=>s+c.qty,0);const topCatItems=topCats.reduce((s,c)=>s+c.items,0);
     const catRows=[[{text:'#',options:hdr()},{text:'구분',options:hdr()},{text:'대분류',options:hdr()},{text:'품목수',options:hdrR()},{text:'수량',options:hdrR()},{text:'매출',options:hdrR()},{text:'비중',options:hdrR()},{text:'전월비',options:hdrR()}],
-      ...topCats.map((c,i)=>[{text:String(i+1),options:{fontSize:8}},{text:c.prefix==='C'?'제품':'원재료',options:{fontSize:8,align:'center'}},{text:c.catNm,options:{fontSize:8}},{text:String(c.items),options:{align:'right',fontSize:8}},{text:_f(c.qty),options:{align:'right',fontSize:8}},{text:_m(c.amt),options:{align:'right',fontSize:8,bold:true}},{text:(c.amt/catTotal*100).toFixed(1)+'%',options:{align:'right',fontSize:8}},{text:c.prevAmt>0?_chg(c.amt,c.prevAmt):'-',options:{align:'right',fontSize:8,color:c.amt>=c.prevAmt?C.green:C.red}}])];
+      ...topCats.map((c,i)=>[{text:String(i+1),options:{fontSize:8}},{text:c.prefix==='C'?'제품':'원재료',options:{fontSize:8,align:'center'}},{text:c.catNm,options:{fontSize:8}},{text:String(c.items),options:{align:'right',fontSize:8}},{text:_f(c.qty),options:{align:'right',fontSize:8}},{text:_m(c.amt),options:{align:'right',fontSize:8,bold:true}},{text:(c.amt/catTotal*100).toFixed(1)+'%',options:{align:'right',fontSize:8}},{text:c.prevAmt>0?_chg(c.amt,c.prevAmt):'-',options:{align:'right',fontSize:8,color:c.amt>=c.prevAmt?C.green:C.red}}]),
+      [{text:'',options:{fontSize:8}},{text:'',options:{fontSize:8}},{text:'합계',options:{fontSize:8,bold:true}},{text:String(topCatItems),options:{align:'right',fontSize:8,bold:true}},{text:_f(topCatQty),options:{align:'right',fontSize:8,bold:true}},{text:_m(topCatAmt),options:{align:'right',fontSize:8,bold:true}},{text:(catTotal>0?(topCatAmt/catTotal*100).toFixed(1):0)+'%',options:{align:'right',fontSize:8,bold:true}},{text:'',options:{fontSize:8}}]];
     // colW합=9.2: 0.3+0.8+1.9+0.7+0.9+1.4+0.9+2.3=9.2
     s5.addTable(catRows,{x:L.mx,y:L.bodyY,w:L.tw,border:tblBorder,colW:[0.4,0.8,1.9,0.7,0.9,1.4,0.9,2.2],rowH:0.27,autoPage:false});
   }
