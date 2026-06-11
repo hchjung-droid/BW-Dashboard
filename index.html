@@ -2945,15 +2945,14 @@ async function _buildSalesInsight(st){
     const cd=_mio[csku];if(cd&&cd[lastMk]){const r=cd[lastMk];if(r.eq>0&&r.ea>0)return Math.round(r.ea/r.eq);if(r.iq>0&&r.ia>0)return Math.round(r.ia/r.iq)}
     const inv=(D.inv||[]).find(i=>i.sku_id===csku);return(inv&&inv.qty>0&&inv.amount>0)?Math.round(inv.amount/inv.qty):0;
   }
-  // Per-item BOM 원가율
+  // Per-item BOM 단가 (순수 BOM 구성 자재단가 합계, 간접비 제외, 수량 미곱)
   const _ibom={};let _bomCostSum=0,_bomRevSum=0;
   itemRank.slice(0,10).forEach(r=>{
-    if(!r.sku_id||!r.sku_id.startsWith('C-')){_ibom[r.sku_id]='-';return}
+    if(!r.sku_id||!r.sku_id.startsWith('C-')){_ibom[r.sku_id]=0;return}
     const ch=(D.bom||[]).filter(b=>b.parent_sku===r.sku_id);
     let bomPU=0;ch.forEach(c=>{bomPU+=_childP(c.child_sku)*(c.qty||1)});
-    const cost=bomPU*r.qty;
-    if(bomPU>0&&r.amt>0){_ibom[r.sku_id]=(cost/r.amt*100).toFixed(1)+'%';_bomCostSum+=cost;_bomRevSum+=r.amt}
-    else{_ibom[r.sku_id]='-'}
+    _ibom[r.sku_id]=bomPU;
+    _bomCostSum+=bomPU*r.qty;_bomRevSum+=r.amt;
   });
   const top10BomCR=_bomRevSum>0?(_bomCostSum/_bomRevSum*100).toFixed(1)+'%':'-';
 
@@ -3016,12 +3015,12 @@ async function _buildSalesInsight(st){
   const top10i=itemRank.slice(0,10);
   const top10iAmt=top10i.reduce((s,r)=>s+r.amt,0);
   const top10iShare=(top10iAmt/selTotal*100).toFixed(1);
-  // colW합=9.2: 0.4+3.4+0.8+0.7+1.0+0.7+0.6+1.6=9.2
-  const iRows=[[{text:'#',options:hdr()},{text:'품목명',options:hdr()},{text:'원가율',options:hdr()},{text:'유형',options:hdr()},{text:'수량',options:hdrR()},{text:'매출',options:hdrR()},{text:'비중',options:hdrR()},{text:'전월비',options:hdrR()}],
-    ...top10i.map((r,i)=>[{text:String(i+1),options:{fontSize:7.5,align:'center'}},{text:r.name,options:{fontSize:6.5}},{text:_ibom[r.sku_id]||'-',options:{fontSize:7,align:'center',color:C.accent}},{text:r.type||'',options:{fontSize:7,align:'center'}},{text:_f(r.qty),options:{align:'right',fontSize:7.5}},{text:_m(r.amt),options:{align:'right',fontSize:7.5,bold:true}},{text:(r.amt/selTotal*100).toFixed(1)+'%',options:{align:'right',fontSize:7.5}},{text:r.prevAmt>0?_chg(r.amt,r.prevAmt):'-',options:{align:'right',fontSize:7.5,color:r.amt>=r.prevAmt?C.green:C.red}}]),
-    [{text:'',options:{fontSize:7.5}},{text:'TOP10 합계',options:{fontSize:7.5,bold:true}},{text:top10BomCR,options:{fontSize:7,align:'center',bold:true,color:C.accent}},{text:'',options:{fontSize:7}},{text:_f(top10i.reduce((s,r)=>s+r.qty,0)),options:{align:'right',fontSize:7.5,bold:true}},{text:_m(top10iAmt),options:{align:'right',fontSize:7.5,bold:true}},{text:top10iShare+'%',options:{align:'right',fontSize:7.5,bold:true}},{text:'',options:{fontSize:7.5}}]
+  // colW합=9.2: 0.4+3.8+0.9+0.8+1.0+0.7+1.6=9.2
+  const iRows=[[{text:'#',options:hdr()},{text:'품목명',options:hdr()},{text:'BOM단가',options:hdrR()},{text:'수량',options:hdrR()},{text:'매출',options:hdrR()},{text:'비중',options:hdrR()},{text:'전월비',options:hdrR()}],
+    ...top10i.map((r,i)=>[{text:String(i+1),options:{fontSize:7.5,align:'center'}},{text:r.name,options:{fontSize:7}},{text:_ibom[r.sku_id]>0?_f(_ibom[r.sku_id]):'-',options:{align:'right',fontSize:7.5,color:C.accent}},{text:_f(r.qty),options:{align:'right',fontSize:7.5}},{text:_m(r.amt),options:{align:'right',fontSize:7.5,bold:true}},{text:(r.amt/selTotal*100).toFixed(1)+'%',options:{align:'right',fontSize:7.5}},{text:r.prevAmt>0?_chg(r.amt,r.prevAmt):'-',options:{align:'right',fontSize:7.5,color:r.amt>=r.prevAmt?C.green:C.red}}]),
+    [{text:'',options:{fontSize:7.5}},{text:'TOP10 합계',options:{fontSize:7.5,bold:true}},{text:'원가율 '+top10BomCR,options:{align:'right',fontSize:7,bold:true,color:C.accent}},{text:_f(top10i.reduce((s,r)=>s+r.qty,0)),options:{align:'right',fontSize:7.5,bold:true}},{text:_m(top10iAmt),options:{align:'right',fontSize:7.5,bold:true}},{text:top10iShare+'%',options:{align:'right',fontSize:7.5,bold:true}},{text:'',options:{fontSize:7.5}}]
   ];
-  s3.addTable(iRows,{x:L.mx,y:L.bodyY,w:L.tw,border:tblBorder,colW:[0.4,3.4,0.8,0.7,1.0,0.7,0.6,1.6],rowH:0.27,autoPage:false});
+  s3.addTable(iRows,{x:L.mx,y:L.bodyY,w:L.tw,border:tblBorder,colW:[0.4,3.8,0.9,0.8,1.0,0.7,1.6],rowH:0.27,autoPage:false});
   const ins3=[];
   ins3.push(`TOP10 점유율 ${top10iShare}%, BOM 원가율 ${top10BomCR}`);
   ins3.push(`매출 1위: ${top10i[0].name} (${_m(top10i[0].amt)}, ${(top10i[0].amt/selTotal*100).toFixed(1)}%)`);
