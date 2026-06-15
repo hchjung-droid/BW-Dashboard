@@ -4527,7 +4527,13 @@ function renderItemCustsModal(){
   }).filter(r=>r.pQty!==0||r.pAmt!==0).sort((a,b)=>Math.abs(b.pAmt)-Math.abs(a.pAmt));
   const totalAmt=rows.reduce((s,r)=>s+r.pAmt,0);
   const totalQty=rows.reduce((s,r)=>s+r.pQty,0);
-  const avgPrice=totalQty>0?totalAmt/totalQty:0;
+  // 평균단가: 구독렌탈/할부(0원) 제외, 일시불(amt≠0) 수량 기준 (마이너스 반품은 차감)
+  const paidQty=(D.sales_tx||[]).reduce((s,t)=>{
+    if(t.sku_id!==skuId||(t.amt||0)===0)return s;
+    const mk=(t.date||'').substring(0,7).replace('/','-');
+    return selMs.indexOf(mk)<0?s:s+(t.qty||0);
+  },0);
+  const avgPrice=paidQty>0?totalAmt/paidQty:0;
   // All-time customer count
   const allMs2=[...M25,...M26_DATA];
   const allCustCnt=custRows.filter(cr=>allMs2.some(m=>cr.ml[m]&&cr.ml[m].q!==0)).length;
