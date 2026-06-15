@@ -6491,4 +6491,42 @@ function pgLogicRef(){
     <tr><td style="${tdStyle}">2025</td><td style="${tdStyle}">${M25.filter(m=>hasData(m)).join(', ')||'(없음)'}</td><td style="${tdStyle}">${M25.filter(m=>hasData(m)).length}개월</td></tr>
     <tr><td style="${tdStyle}">2026</td><td style="${tdStyle}">${M26_DATA.join(', ')}</td><td style="${tdStyle}">${M26_DATA.length}개월</td></tr>
     </tbody></table>
-    <div style="margin-top:8px;
+    <div style="margin-top:8px;font-size:11px;color:var(--tx2)">
+      lastMk(전체 선택 시 기준월): <b>${M26_DATA[M26_DATA.length-1]}</b> |
+      selMonth: <b>${S.selMonth}</b> | selYear: <b>${S.selYear}</b>
+    </div>
+  `);
+
+  return `<div style="max-width:1200px;margin:0 auto">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px">
+      <h2 style="font-size:18px;margin:0">📐 수치산정 로직 레퍼런스</h2>
+      <span style="font-size:11px;color:var(--tx2)">선택 기간: ${periodLabel()} | 기준월: ${lastMk}</span>
+    </div>
+    ${periodHtml}
+    ${srcHtml}
+    ${kpiHtml}
+    ${bcHtml}
+    ${colHtml}
+    ${salesHtml}
+    ${ssHtml}
+    ${costHtml}
+    ${bomHtml}
+  </div>`;
+}
+
+function _dateToMonth(d){
+  if(!d)return'';const s=String(d).split(' ')[0].trim().replace(/-/g,'/').split('/');
+  return s.length>=2?s[0]+'-'+s[1].padStart(2,'0'):'';
+}
+
+// ========== INIT ==========
+Chart.defaults.color='#475569';Chart.defaults.borderColor='rgba(100,116,139,.15)';
+Chart.defaults.plugins.tooltip.titleFont={size:13,weight:'bold'};
+Chart.defaults.plugins.tooltip.bodyFont={size:12};
+Chart.defaults.plugins.tooltip.padding=10;
+Chart.defaults.plugins.tooltip.displayColors=true;
+render();
+</script>
+<script src="report_gen.js"></script>
+</body>
+</html>
