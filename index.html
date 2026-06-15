@@ -2946,11 +2946,23 @@ async function _buildSalesInsight(st){
     const inv=(D.inv||[]).find(i=>i.sku_id===csku);return(inv&&inv.qty>0&&inv.amount>0)?Math.round(inv.amount/inv.qty):0;
   }
   // Per-item BOM 단가 (순수 BOM 구성 자재단가 합계, 간접비 제외, 수량 미곱)
+  // ★ 단품(BOM 구성 없음: B-원재료 또는 BOM 미등록 C-품목)은 자체 매입가로 fallback
+  const _allPurR=[...(D.purch25||[]),...(D.purch26||[])].sort((a,b)=>(b.date||'').localeCompare(a.date||''));
+  function _selfP(s){
+    // 단품 자체 매입가: ①수불부 기말/입고단가 → ②구매현황 최근 매입가 → ③재고 평균/단가
+    const cd=_mio[s];
+    if(cd&&cd[lastMk]){const r=cd[lastMk];if(r.eq>0&&r.ea>0)return Math.round(r.ea/r.eq);if(r.iq>0&&r.ia>0)return Math.round(r.ia/r.iq);}
+    if(cd){for(let j=DATA_MONTHS.indexOf(lastMk)-1;j>=0;j--){const rr=cd[DATA_MONTHS[j]];if(!rr)continue;if(rr.eq>0&&rr.ea>0)return Math.round(rr.ea/rr.eq);if(rr.iq>0&&rr.ia>0)return Math.round(rr.ia/rr.iq);}}
+    const pur=_allPurR.find(x=>x.sku_id===s&&x.price>0);if(pur)return pur.price;
+    const inv=(D.inv||[]).find(i=>i.sku_id===s);
+    if(inv){if(inv.qty>0&&inv.amount>0)return Math.round(inv.amount/inv.qty);if(inv.unit_cost>0)return inv.unit_cost;}
+    return 0;
+  }
   const _ibom={};let _bomCostSum=0,_bomRevSum=0;
   itemRank.slice(0,10).forEach(r=>{
-    if(!r.sku_id||!r.sku_id.startsWith('C-')){_ibom[r.sku_id]=0;return}
-    const ch=(D.bom||[]).filter(b=>b.parent_sku===r.sku_id);
+    const ch=(r.sku_id&&r.sku_id.startsWith('C-'))?(D.bom||[]).filter(b=>b.parent_sku===r.sku_id):[];
     let bomPU=0;ch.forEach(c=>{bomPU+=_childP(c.child_sku)*(c.qty||1)});
+    if(bomPU<=0)bomPU=_selfP(r.sku_id); // 단품 → 자체 매입가
     _ibom[r.sku_id]=bomPU;
     _bomCostSum+=bomPU*r.qty;_bomRevSum+=r.amt;
   });
@@ -3015,12 +3027,12 @@ async function _buildSalesInsight(st){
   const top10i=itemRank.slice(0,10);
   const top10iAmt=top10i.reduce((s,r)=>s+r.amt,0);
   const top10iShare=(top10iAmt/selTotal*100).toFixed(1);
-  // colW합=9.2: 0.4+3.8+0.9+0.8+1.0+0.7+1.6=9.2
-  const iRows=[[{text:'#',options:hdr()},{text:'품목명',options:hdr()},{text:'BOM단가',options:hdrR()},{text:'수량',options:hdrR()},{text:'매출',options:hdrR()},{text:'비중',options:hdrR()},{text:'전월비',options:hdrR()}],
-    ...top10i.map((r,i)=>[{text:String(i+1),options:{fontSize:7.5,align:'center'}},{text:r.name,options:{fontSize:7}},{text:_ibom[r.sku_id]>0?_f(_ibom[r.sku_id]):'-',options:{align:'right',fontSize:7.5,color:C.accent}},{text:_f(r.qty),options:{align:'right',fontSize:7.5}},{text:_m(r.amt),options:{align:'right',fontSize:7.5,bold:true}},{text:(r.amt/selTotal*100).toFixed(1)+'%',options:{align:'right',fontSize:7.5}},{text:r.prevAmt>0?_chg(r.amt,r.prevAmt):'-',options:{align:'right',fontSize:7.5,color:r.amt>=r.prevAmt?C.green:C.red}}]),
-    [{text:'',options:{fontSize:7.5}},{text:'TOP10 합계',options:{fontSize:7.5,bold:true}},{text:'원가율 '+top10BomCR,options:{align:'right',fontSize:7,bold:true,color:C.accent}},{text:_f(top10i.reduce((s,r)=>s+r.qty,0)),options:{align:'right',fontSize:7.5,bold:true}},{text:_m(top10iAmt),options:{align:'right',fontSize:7.5,bold:true}},{text:top10iShare+'%',options:{align:'right',fontSize:7.5,bold:true}},{text:'',options:{fontSize:7.5}}]
+  // colW합=9.2: 0.35+3.15+0.7+1.0+0.7+1.1+1.1+1.1=9.2 (컬럼순: 수량·매출·비중·전월비·BOM단가·판매단가)
+  const iRows=[[{text:'#',options:hdr()},{text:'품목명',options:hdr()},{text:'수량',options:hdrR()},{text:'매출',options:hdrR()},{text:'비중',options:hdrR()},{text:'전월비',options:hdrR()},{text:'BOM단가',options:hdrR()},{text:'판매단가',options:hdrR()}],
+    ...top10i.map((r,i)=>[{text:String(i+1),options:{fontSize:7.5,align:'center'}},{text:r.name,options:{fontSize:7}},{text:_f(r.qty),options:{align:'right',fontSize:7.5}},{text:_m(r.amt),options:{align:'right',fontSize:7.5,bold:true}},{text:(r.amt/selTotal*100).toFixed(1)+'%',options:{align:'right',fontSize:7.5}},{text:r.prevAmt>0?_chg(r.amt,r.prevAmt):'-',options:{align:'right',fontSize:7.5,color:r.amt>=r.prevAmt?C.green:C.red}},{text:_ibom[r.sku_id]>0?_f(_ibom[r.sku_id]):'-',options:{align:'right',fontSize:7.5,color:C.accent}},{text:r.qty>0?_f(Math.round(r.amt/r.qty)):'-',options:{align:'right',fontSize:7.5}}]),
+    [{text:'',options:{fontSize:7.5}},{text:'TOP10 합계',options:{fontSize:7.5,bold:true}},{text:_f(top10i.reduce((s,r)=>s+r.qty,0)),options:{align:'right',fontSize:7.5,bold:true}},{text:_m(top10iAmt),options:{align:'right',fontSize:7.5,bold:true}},{text:top10iShare+'%',options:{align:'right',fontSize:7.5,bold:true}},{text:'',options:{fontSize:7.5}},{text:'원가율 '+top10BomCR,options:{align:'right',fontSize:7,bold:true,color:C.accent}},{text:'',options:{fontSize:7.5}}]
   ];
-  s3.addTable(iRows,{x:L.mx,y:L.bodyY,w:L.tw,border:tblBorder,colW:[0.4,3.8,0.9,0.8,1.0,0.7,1.6],rowH:0.27,autoPage:false});
+  s3.addTable(iRows,{x:L.mx,y:L.bodyY,w:L.tw,border:tblBorder,colW:[0.35,3.15,0.7,1.0,0.7,1.1,1.1,1.1],rowH:0.27,autoPage:false});
   const ins3=[];
   ins3.push(`TOP10 점유율 ${top10iShare}%, BOM 원가율 ${top10BomCR}`);
   ins3.push(`매출 1위: ${top10i[0].name} (${_m(top10i[0].amt)}, ${(top10i[0].amt/selTotal*100).toFixed(1)}%)`);
@@ -6479,42 +6491,4 @@ function pgLogicRef(){
     <tr><td style="${tdStyle}">2025</td><td style="${tdStyle}">${M25.filter(m=>hasData(m)).join(', ')||'(없음)'}</td><td style="${tdStyle}">${M25.filter(m=>hasData(m)).length}개월</td></tr>
     <tr><td style="${tdStyle}">2026</td><td style="${tdStyle}">${M26_DATA.join(', ')}</td><td style="${tdStyle}">${M26_DATA.length}개월</td></tr>
     </tbody></table>
-    <div style="margin-top:8px;font-size:11px;color:var(--tx2)">
-      lastMk(전체 선택 시 기준월): <b>${M26_DATA[M26_DATA.length-1]}</b> |
-      selMonth: <b>${S.selMonth}</b> | selYear: <b>${S.selYear}</b>
-    </div>
-  `);
-
-  return `<div style="max-width:1200px;margin:0 auto">
-    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px">
-      <h2 style="font-size:18px;margin:0">📐 수치산정 로직 레퍼런스</h2>
-      <span style="font-size:11px;color:var(--tx2)">선택 기간: ${periodLabel()} | 기준월: ${lastMk}</span>
-    </div>
-    ${periodHtml}
-    ${srcHtml}
-    ${kpiHtml}
-    ${bcHtml}
-    ${colHtml}
-    ${salesHtml}
-    ${ssHtml}
-    ${costHtml}
-    ${bomHtml}
-  </div>`;
-}
-
-function _dateToMonth(d){
-  if(!d)return'';const s=String(d).split(' ')[0].trim().replace(/-/g,'/').split('/');
-  return s.length>=2?s[0]+'-'+s[1].padStart(2,'0'):'';
-}
-
-// ========== INIT ==========
-Chart.defaults.color='#475569';Chart.defaults.borderColor='rgba(100,116,139,.15)';
-Chart.defaults.plugins.tooltip.titleFont={size:13,weight:'bold'};
-Chart.defaults.plugins.tooltip.bodyFont={size:12};
-Chart.defaults.plugins.tooltip.padding=10;
-Chart.defaults.plugins.tooltip.displayColors=true;
-render();
-</script>
-<script src="report_gen.js"></script>
-</body>
-</html>
+    <div style="margin-top:8px;
