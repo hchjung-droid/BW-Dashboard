@@ -2587,14 +2587,17 @@ function _salesChurn(selMs,mLabel){
     return`<div class="pn"><div class="pt">신규/이탈 거래처 추적</div><div style="text-align:center;padding:40px;color:var(--tx2)">분석 가능한 월이 2개 이상 필요합니다 (500만원 이상 거래처 기준). 기간을 조정해주세요.</div></div>`;
   }
 
-  // For each month, get active customers (500만원 이상만)
+  // For each month, get active customers (500만원 이상만) — 신규/이탈 판정용
   const monthCusts={};
+  // ★ 활성 거래처는 '총거래처'(매출 있는 모든 곳) 기준 — 신규/이탈만 500만원 이상
+  const monthActiveAll={};
   analysisMs.forEach(m=>{
     monthCusts[m]=new Set();
+    monthActiveAll[m]=new Set();
     D.csd.forEach(c=>{
-      if(c.monthly[m]&&c.monthly[m].amt>=MIN_AMT){
-        monthCusts[m].add(c.name);
-      }
+      const a=c.monthly[m]?c.monthly[m].amt:0;
+      if(a>0)monthActiveAll[m].add(c.name);
+      if(a>=MIN_AMT)monthCusts[m].add(c.name);
     });
   });
 
@@ -2622,7 +2625,8 @@ function _salesChurn(selMs,mLabel){
 
     churnData.push({
       month:curM,
-      active:cur.size,
+      active:(monthActiveAll[curM]||cur).size,        // 총거래처(매출 있는 모든 곳)
+      activeBig:cur.size,                              // 500만원 이상 활성 (참고)
       newCusts:sortByAmt(newCusts,curM),newCnt:newCusts.length,newAmt:getAmt(newCusts,curM),
       churned:sortByAmt(churned,prevM),churnedCnt:churned.length,churnedAmt:getAmt(churned,prevM),
       returned:sortByAmt(returned,curM),returnedCnt:returned.length,returnedAmt:getAmt(returned,curM),
@@ -2637,14 +2641,14 @@ function _salesChurn(selMs,mLabel){
   const topNames=(arr,max)=>arr?arr.slice(0,max).map(n=>n.length>8?n.slice(0,8)+'..':n).join(', '):'';
 
   let h=`<div class="pn"><div class="pt">신규/이탈 거래처 추적 <span class="badge">${mLabel}</span>
-    <span style="font-size:10px;color:var(--tx2);margin-left:8px">기준: 월 매출 500만원 이상 | 최신 분석월: ${latestMLabel}</span></div>`;
+    <span style="font-size:10px;color:var(--tx2);margin-left:8px">활성=총거래처 · 신규/이탈=월 매출 500만원 이상 | 최신 분석월: ${latestMLabel}</span></div>`;
 
   // Summary KPIs with customer names
   h+=`<div class="kr" style="margin:12px 0">
     <div class="kc" style="border-left:3px solid #22c55e"><div class="lb">신규 거래처 (${latestMLabel})</div><div class="vl c-gn">${latest.newCnt||0}개사</div><div class="sb">${fmtM(latest.newAmt||0)}</div>${latest.newCnt>0?`<div style="font-size:9px;color:var(--tx2);margin-top:4px;line-height:1.4">${topNames(latest.newCusts,3)}${latest.newCnt>3?' 외 '+(latest.newCnt-3)+'사':''}</div>`:''}</div>
     <div class="kc" style="border-left:3px solid #ef4444"><div class="lb">이탈 거래처 (${latestMLabel})</div><div class="vl c-rd">${latest.churnedCnt||0}개사</div><div class="sb">전월 ${fmtM(latest.churnedAmt||0)}</div>${latest.churnedCnt>0?`<div style="font-size:9px;color:var(--tx2);margin-top:4px;line-height:1.4">${topNames(latest.churned,3)}${latest.churnedCnt>3?' 외 '+(latest.churnedCnt-3)+'사':''}</div>`:''}</div>
     <div class="kc" style="border-left:3px solid #a855f7"><div class="lb">복귀 거래처 (${latestMLabel})</div><div class="vl c-pp">${latest.returnedCnt||0}개사</div><div class="sb">${fmtM(latest.returnedAmt||0)}</div>${latest.returnedCnt>0?`<div style="font-size:9px;color:var(--tx2);margin-top:4px;line-height:1.4">${topNames(latest.returned,3)}${latest.returnedCnt>3?' 외 '+(latest.returnedCnt-3)+'사':''}</div>`:''}</div>
-    <div class="kc"><div class="lb">활성 거래처 (${latestMLabel})</div><div class="vl c-bl">${latest.active||0}개사</div><div class="sb">유지 ${latest.retainedCnt||0} / 순증감 ${(()=>{const n=(latest.newCnt||0)+(latest.returnedCnt||0)-(latest.churnedCnt||0);return(n>=0?'+':'')+n})()}</div></div>
+    <div class="kc"><div class="lb">활성 거래처 (총, ${latestMLabel})</div><div class="vl c-bl">${latest.active||0}개사</div><div class="sb">500만↑ ${latest.activeBig||0} · 순증감 ${(()=>{const n=(latest.newCnt||0)+(latest.returnedCnt||0)-(latest.churnedCnt||0);return(n>=0?'+':'')+n})()}</div></div>
   </div>`;
 
   // Trend chart
@@ -2652,7 +2656,7 @@ function _salesChurn(selMs,mLabel){
 
   // Monthly detail table
   h+=`<div class="st" style="max-height:300px;margin-top:12px"><table>
-    <thead><tr><th>월</th><th class="tr">활성</th><th class="tr" style="color:#22c55e">신규</th><th class="tr" style="color:#ef4444">이탈</th><th class="tr" style="color:#a855f7">복귀</th><th class="tr">유지</th><th class="tr">순증감</th></tr></thead>
+    <thead><tr><th>월</th><th class="tr">활성(총)</th><th class="tr" style="color:#22c55e">신규</th><th class="tr" style="color:#ef4444">이탈</th><th class="tr" style="color:#a855f7">복귀</th><th class="tr">유지</th><th class="tr">순증감</th></tr></thead>
     <tbody>${churnData.map(d=>{
       const net=d.newCnt+d.returnedCnt-d.churnedCnt;
       return`<tr>
@@ -2686,7 +2690,7 @@ function _salesChurn(selMs,mLabel){
     <div style="display:flex;flex-wrap:wrap;gap:6px;margin-top:6px">${latest.returned.slice(0,20).map(n=>`<span class="tg" style="cursor:pointer;background:rgba(168,85,247,.15);color:#a855f7" onclick="openCustItems('${n.replace(/'/g,"\\'")}')">${n}</span>`).join('')}</div></div>`;
   }
 
-  h+=`<div style="font-size:10px;color:var(--tx2);margin-top:10px">* 월 매출 500만원 이상 거래처만 분석 | 신규=분석기간 내 처음 거래 | 이탈=전월 있었으나 당월 없음 | 복귀=전월 없었으나 이전 거래 이력 있음</div></div>`;
+  h+=`<div style="font-size:10px;color:var(--tx2);margin-top:10px">* 활성=총거래처(매출 있는 모든 곳) | 신규·이탈·복귀·유지=월 매출 500만원 이상 (소액 거래처 변동은 제외) | 신규=분석기간 내 처음 거래 | 이탈=전월 있었으나 당월 없음 | 복귀=전월 없었으나 이전 거래 이력 있음</div></div>`;
   return h;
 }
 
@@ -2937,7 +2941,8 @@ async function _buildSalesInsight(st){
   let churnMs=allMs.filter(m=>{let has=false;D.csd.forEach(c=>{if(c.monthly[m]&&c.monthly[m].amt>=MIN_AMT)has=true});return has});
   if(churnMs.length<2)churnMs=[];
   const churnMonthCusts={};
-  churnMs.forEach(m=>{churnMonthCusts[m]=new Set();D.csd.forEach(c=>{if(c.monthly[m]&&c.monthly[m].amt>=MIN_AMT)churnMonthCusts[m].add(c.name)})});
+  const churnActiveAll={}; // ★ 총거래처(매출 있는 모든 곳) — 활성 카운트용 (신규/이탈은 500만원 기준 유지)
+  churnMs.forEach(m=>{churnMonthCusts[m]=new Set();churnActiveAll[m]=new Set();D.csd.forEach(c=>{const a=c.monthly[m]?c.monthly[m].amt:0;if(a>0)churnActiveAll[m].add(c.name);if(a>=MIN_AMT)churnMonthCusts[m].add(c.name)})});
   const churnData=[];
   for(let i=1;i<churnMs.length;i++){
     const curM=churnMs[i],prevM2=churnMs[i-1];
@@ -2946,7 +2951,7 @@ async function _buildSalesInsight(st){
     const newC=[...cur].filter(n=>!allPrior.has(n));
     const churned=[...prev].filter(n=>!cur.has(n));
     const getA=(ns,m2)=>ns.reduce((s,n)=>{const c=D.csd.find(x=>x.name===n);return s+(c&&c.monthly[m2]?c.monthly[m2].amt:0)},0);
-    churnData.push({month:curM,active:cur.size,newC,newCnt:newC.length,newAmt:getA(newC,curM),churned,churnedCnt:churned.length,churnedAmt:getA(churned,prevM2)});
+    churnData.push({month:curM,active:(churnActiveAll[curM]||cur).size,newC,newCnt:newC.length,newAmt:getA(newC,curM),churned,churnedCnt:churned.length,churnedAmt:getA(churned,prevM2)});
   }
   const latestChurn=churnData.length>0?churnData[churnData.length-1]:null;
 
@@ -5693,7 +5698,8 @@ function renderCharts(){
         analysisMs4=analysisMs4.filter(m=>{let has=false;D.csd.forEach(c=>{if(c.monthly[m]&&c.monthly[m].amt>=MIN_AMT4)has=true});return has});
         if(analysisMs4.length>=2){
           const monthCusts4={};
-          analysisMs4.forEach(m=>{monthCusts4[m]=new Set();D.csd.forEach(c=>{if(c.monthly[m]&&c.monthly[m].amt>=MIN_AMT4)monthCusts4[m].add(c.name)})});
+          const monthActiveAll4={}; // 총거래처(매출 있는 모든 곳) — 활성 라인용
+          analysisMs4.forEach(m=>{monthCusts4[m]=new Set();monthActiveAll4[m]=new Set();D.csd.forEach(c=>{const a=c.monthly[m]?c.monthly[m].amt:0;if(a>0)monthActiveAll4[m].add(c.name);if(a>=MIN_AMT4)monthCusts4[m].add(c.name)})});
           const chLabels=[],chNew=[],chChurned=[],chReturned=[],chActive=[];
           for(let i=1;i<analysisMs4.length;i++){
             const curM=analysisMs4[i],prevM=analysisMs4[i-1];
@@ -5703,7 +5709,7 @@ function renderCharts(){
             chNew.push([...cur].filter(n=>!allPrior.has(n)).length);
             chChurned.push(-[...prev].filter(n=>!cur.has(n)).length);
             chReturned.push([...cur].filter(n=>!prev.has(n)&&allPrior.has(n)).length);
-            chActive.push(cur.size);
+            chActive.push((monthActiveAll4[curM]||cur).size);
           }
           _charts.push(new Chart(chCanvas,{type:'bar',data:{labels:chLabels,datasets:[
             {label:'신규',data:chNew,backgroundColor:'rgba(34,197,94,.7)',borderRadius:3,stack:'s1'},
