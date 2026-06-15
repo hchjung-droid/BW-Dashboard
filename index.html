@@ -2903,20 +2903,29 @@ async function _buildSalesInsight(st){
   let txAmt=0,txQty=0;
   (D.sales_tx||[]).forEach(tx=>{
     const txM=tx.date?tx.date.substring(0,7).replace('/','-'):'';
-    if(selMs.includes(txM)){txAmt+=(tx.amt||0);txQty+=(tx.qty||0)}
+    if(selMs.includes(txM)){txAmt+=(tx.amt||0);if((tx.amt||0)!==0)txQty+=(tx.qty||0)}
   });
   const avgPrice=txQty>0?Math.round(txAmt/txQty):0;
   let prevTxAmt=0,prevTxQty=0;
   if(prevMs.length>0){
     (D.sales_tx||[]).forEach(tx=>{
       const txM=tx.date?tx.date.substring(0,7).replace('/','-'):'';
-      if(prevMs.includes(txM)){prevTxAmt+=(tx.amt||0);prevTxQty+=(tx.qty||0)}
+      if(prevMs.includes(txM)){prevTxAmt+=(tx.amt||0);if((tx.amt||0)!==0)prevTxQty+=(tx.qty||0)}
     });
   }
   const prevAvgPrice=prevTxQty>0?Math.round(prevTxAmt/prevTxQty):0;
 
   // Top items — ★ 전월 비교
   const itemRank=D.isd.map(i=>({name:i.name,sku_id:i.sku_id,type:i.type,amt:selMs.reduce((s,m)=>s+(i.monthly[m]?i.monthly[m].amt:0),0),qty:selMs.reduce((s,m)=>s+(i.monthly[m]?i.monthly[m].qty:0),0),prevAmt:prevMs.reduce((s,m)=>s+(i.monthly[m]?i.monthly[m].amt:0),0)})).filter(r=>r.amt>0).sort((a,b)=>b.amt-a.amt);
+
+  // 일시불 판매수량 (구독렌탈 0원 제외, 마이너스 반품 차감) — 보고서 판매단가용
+  const paidQByItemR={};
+  (D.sales_tx||[]).forEach(t=>{
+    if((t.amt||0)===0)return;
+    const mk=(t.date||'').substring(0,7).replace('/','-');
+    if(selMs.indexOf(mk)<0)return;
+    paidQByItemR[t.sku_id]=(paidQByItemR[t.sku_id]||0)+(t.qty||0);
+  });
 
   // Customer data — ★ 전월 비교
   const custRank=D.csd.map(c=>({name:c.name,amt:selMs.reduce((s,m)=>s+(c.monthly[m]?c.monthly[m].amt:0),0),qty:selMs.reduce((s,m)=>s+(c.monthly[m]?c.monthly[m].qty:0),0),prevAmt:prevMs.reduce((s,m)=>s+(c.monthly[m]?c.monthly[m].amt:0),0)})).filter(r=>r.amt>0).sort((a,b)=>b.amt-a.amt);
@@ -3037,7 +3046,7 @@ async function _buildSalesInsight(st){
   const top10iShare=(top10iAmt/selTotal*100).toFixed(1);
   // colW합=9.2: 0.35+3.15+0.7+1.0+0.7+1.1+1.1+1.1=9.2 (컬럼순: 수량·매출·비중·전월비·BOM단가·판매단가)
   const iRows=[[{text:'#',options:hdr()},{text:'품목명',options:hdr()},{text:'수량',options:hdrR()},{text:'매출',options:hdrR()},{text:'비중',options:hdrR()},{text:'전월비',options:hdrR()},{text:'BOM단가',options:hdrR()},{text:'판매단가',options:hdrR()}],
-    ...top10i.map((r,i)=>[{text:String(i+1),options:{fontSize:7.5,align:'center'}},{text:r.name,options:{fontSize:7}},{text:_f(r.qty),options:{align:'right',fontSize:7.5}},{text:_m(r.amt),options:{align:'right',fontSize:7.5,bold:true}},{text:(r.amt/selTotal*100).toFixed(1)+'%',options:{align:'right',fontSize:7.5}},{text:r.prevAmt>0?_chg(r.amt,r.prevAmt):'-',options:{align:'right',fontSize:7.5,color:r.amt>=r.prevAmt?C.green:C.red}},{text:_ibom[r.sku_id]>0?_f(_ibom[r.sku_id]):'-',options:{align:'right',fontSize:7.5,color:C.accent}},{text:r.qty>0?_f(Math.round(r.amt/r.qty)):'-',options:{align:'right',fontSize:7.5}}]),
+    ...top10i.map((r,i)=>[{text:String(i+1),options:{fontSize:7.5,align:'center'}},{text:r.name,options:{fontSize:7}},{text:_f(r.qty),options:{align:'right',fontSize:7.5}},{text:_m(r.amt),options:{align:'right',fontSize:7.5,bold:true}},{text:(r.amt/selTotal*100).toFixed(1)+'%',options:{align:'right',fontSize:7.5}},{text:r.prevAmt>0?_chg(r.amt,r.prevAmt):'-',options:{align:'right',fontSize:7.5,color:r.amt>=r.prevAmt?C.green:C.red}},{text:_ibom[r.sku_id]>0?_f(_ibom[r.sku_id]):'-',options:{align:'right',fontSize:7.5,color:C.accent}},{text:(paidQByItemR[r.sku_id]||0)>0?_f(Math.round(r.amt/paidQByItemR[r.sku_id])):'-',options:{align:'right',fontSize:7.5}}]),
     [{text:'',options:{fontSize:7.5}},{text:'TOP10 합계',options:{fontSize:7.5,bold:true}},{text:_f(top10i.reduce((s,r)=>s+r.qty,0)),options:{align:'right',fontSize:7.5,bold:true}},{text:_m(top10iAmt),options:{align:'right',fontSize:7.5,bold:true}},{text:top10iShare+'%',options:{align:'right',fontSize:7.5,bold:true}},{text:'',options:{fontSize:7.5}},{text:'원가율 '+top10BomCR,options:{align:'right',fontSize:7,bold:true,color:C.accent}},{text:'',options:{fontSize:7.5}}]
   ];
   s3.addTable(iRows,{x:L.mx,y:L.bodyY,w:L.tw,border:tblBorder,colW:[0.35,3.15,0.7,1.0,0.7,1.1,1.1,1.1],rowH:0.27,autoPage:false});
