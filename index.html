@@ -2317,6 +2317,14 @@ function pgSales(){
         <th class="sortable tr" onclick="toggleSalesSort('avg_price')">평균단가 ${S.salesSort.col==='avg_price'?(S.salesSort.dir==='asc'?'▲':'▼'):''}</th>
       </tr></thead>
       <tbody>${(()=>{
+        // 평균단가용: 구독렌탈(0원) 제외한 일시불 판매수량 (selMs 기준)
+        const paidQByItem={};
+        (D.sales_tx||[]).forEach(t=>{
+          if((t.amt||0)===0)return; // 구독렌탈(0원)만 제외 — 마이너스(반품)는 포함해 정상 차감
+          const mk=(t.date||'').substring(0,7).replace('/','-');
+          if(selMs.indexOf(mk)<0)return;
+          paidQByItem[t.sku_id]=(paidQByItem[t.sku_id]||0)+(t.qty||0);
+        });
         let list=D.isd;
         if(S.fSkuType==='C')list=cItems;
         if(S.fSkuType==='B')list=bItems;
@@ -2332,7 +2340,7 @@ function pgSales(){
           if(col==='name')return i.name;
           if(col==='total_qty')return i.pQty||0;
           if(col==='total_amt')return i.pAmt||0;
-          if(col==='avg_price')return i.pQty>0?i.pAmt/i.pQty:0;
+          if(col==='avg_price'){const pq=paidQByItem[i.sku_id]||0;return pq>0?i.pAmt/pq:0;}
           if(col.startsWith('q_')){const m=col.slice(2);return i.monthly[m]?i.monthly[m].qty||0:0}
           if(col.startsWith('a_')){const m=col.slice(2);return i.monthly[m]?i.monthly[m].amt||0:0}
           return 0;
@@ -2346,7 +2354,7 @@ function pgSales(){
           <td style="max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${i.name}">${i.name}</td>
           ${selMs.map(m=>{const d=i.monthly[m];return`<td class="tr">${d?(isAmt?fmtM(d.amt):fmt(d.qty)):'-'}</td>`}).join('')}
           <td class="tr" style="font-weight:600">${isAmt?fmtM(i.pAmt):fmt(i.pQty)}</td>
-          <td class="tr" style="color:var(--ac2)">${i.pQty>0?fmtM(i.pAmt/i.pQty):'-'}</td></tr>`}).join('')})()}</tbody></table></div>
+          <td class="tr" style="color:var(--ac2)">${(paidQByItem[i.sku_id]||0)>0?fmtM(i.pAmt/paidQByItem[i.sku_id]):'-'}</td></tr>`}).join('')})()}</tbody></table></div>
     <div style="font-size:10px;color:var(--tx2);margin-top:6px">* 행 클릭→품목별 거래처 상세 | 최대 100건</div></div>`;
   }
 
