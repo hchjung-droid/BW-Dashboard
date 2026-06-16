@@ -630,6 +630,7 @@ function trapFocus(modal){
 function sidebar(){
   const items=[
     {id:'dashboard',ic:'📊',lb:'대시보드'},
+    {id:'weekly',ic:'🗓️',lb:'주간보고'},
     {id:'inventory',ic:'📦',lb:'재고 현황'},
     {id:'orders',ic:'📋',lb:'발주 관리'},
     {id:'purchase',ic:'🛒',lb:'구매 분석'},
@@ -663,6 +664,7 @@ function sidebar(){
 function page(){
   switch(S.pg){
     case'dashboard':return pgDash();
+    case'weekly':return pgWeekly();
     case'inventory':return pgInv();
     case'bom':return pgBom();
     case'orders':return pgOrd();
@@ -6546,6 +6548,180 @@ function pgLogicRef(){
 function _dateToMonth(d){
   if(!d)return'';const s=String(d).split(' ')[0].trim().replace(/-/g,'/').split('/');
   return s.length>=2?s[0]+'-'+s[1].padStart(2,'0'):'';
+}
+
+// ═══════════════════════════════════════════════════════════
+// 주간보고 (월~일 캘린더 주차) — 판매+재고+발주 종합
+// ═══════════════════════════════════════════════════════════
+function _wkFmtD(d){return d.getFullYear()+'/'+String(d.getMonth()+1).padStart(2,'0')+'/'+String(d.getDate()).padStart(2,'0')}
+function _wkMMDD(s){const p=String(s).split('/');return p.length>=3?p[1]+'/'+p[2]:s}
+function _wkMonday(s){const p=String(s).split('/').map(Number);const d=new Date(p[0],p[1]-1,p[2]);const w=(d.getDay()+6)%7;d.setDate(d.getDate()-w);d.setHours(0,0,0,0);return d}
+function _weekRange(monStr){
+  const p=monStr.split('/').map(Number);const start=new Date(p[0],p[1]-1,p[2]);
+  const days=[];for(let i=0;i<7;i++){const d=new Date(start);d.setDate(start.getDate()+i);days.push(_wkFmtD(d))}
+  return {start:monStr,endStr:days[6],days,label:_wkMMDD(monStr)+'~'+_wkMMDD(days[6])};
+}
+function _weekList(){
+  const ds=(D.sales_tx||[]).map(t=>t.date).filter(d=>/^\d{4}\/\d{2}\/\d{2}$/.test(d));
+  if(!ds.length)return[];
+  let mn=ds[0],mx=ds[0];ds.forEach(d=>{if(d<mn)mn=d;if(d>mx)mx=d});
+  let cur=_wkMonday(mn);const end=_wkMonday(mx);const out=[];
+  while(cur<=end){out.push(_wkFmtD(cur));const n=new Date(cur);n.setDate(cur.getDate()+7);cur=n}
+  return out;
+}
+function _weekQuick(monStr){
+  const r=_weekRange(monStr);let amt=0;const cs=new Set();
+  (D.sales_tx||[]).forEach(t=>{if(t.date&&t.date>=r.start&&t.date<=r.endStr){amt+=t.amt||0;cs.add(t.cust)}});
+  return {amt,custSet:cs};
+}
+function _weekAgg(monStr){
+  const r=_weekRange(monStr);const inR=d=>d>=r.start&&d<=r.endStr;
+  const tx=(D.sales_tx||[]).filter(t=>t.date&&inR(t.date));
+  let amt=0,qty=0,paidQty=0;const custs={},items={},byDay={};
+  r.days.forEach(d=>byDay[d]=0);
+  tx.forEach(t=>{
+    const ta=t.amt||0;amt+=ta;qty+=t.qty||0;if(ta!==0)paidQty+=t.qty||0;
+    if(byDay[t.date]!==undefined)byDay[t.date]+=ta;
+    custs[t.cust]=(custs[t.cust]||0)+ta;
+    if(!items[t.sku_id])items[t.sku_id]={name:t.name,amt:0,qty:0};
+    items[t.sku_id].amt+=ta;items[t.sku_id].qty+=t.qty||0;
+  });
+  const topItems=Object.keys(items).map(s=>({sku:s,name:items[s].name,amt:items[s].amt,qty:items[s].qty})).filter(i=>i.amt!==0).sort((a,b)=>b.amt-a.amt);
+  const topCusts=Object.keys(custs).map(n=>({name:n,amt:custs[n]})).filter(c=>c.amt!==0).sort((a,b)=>b.amt-a.amt);
+  const po=(D.po||[]).filter(o=>{const d=String(o.date_no||'').split(' ')[0].trim();return inR(d)});
+  let ordAmt=0;const vend={};
+  po.forEach(o=>{ordAmt+=o.amount||0;vend[o.vendor]=(vend[o.vendor]||0)+(o.amount||0)});
+  const ordByVendor=Object.keys(vend).map(n=>({name:n,amt:vend[n]})).sort((a,b)=>b.amt-a.amt);
+  const weeks=_weekList();const idx=weeks.indexOf(monStr);
+  let prevAmt=0,prevCusts=new Set();
+  if(idx>0){const pq=_weekQuick(weeks[idx-1]);prevAmt=pq.amt;prevCusts=pq.custSet}
+  const curSet=new Set(Object.keys(custs));
+  const priorSet=new Set();(D.sales_tx||[]).forEach(t=>{if(t.date&&t.date<r.start)priorSet.add(t.cust)});
+  const newCusts=[...curSet].filter(c=>!priorSet.has(c));
+  const churned=[...prevCusts].filter(c=>!curSet.has(c));
+  return {monStr,range:r,amt,qty,paidQty,avg:paidQty>0?Math.round(amt/paidQty):0,txCnt:tx.length,custCnt:curSet.size,byDay,topItems,topCusts,ordAmt,ordCnt:po.length,ordByVendor,prevAmt,newCusts,churned};
+}
+function setWeek(v){S.weekSel=v;render()}
+function pgWeekly(){
+  const weeks=_weekList();
+  if(!weeks.length)return'<div class="pn"><div class="pt">🗓️ 주간보고</div><div style="padding:40px;text-align:center;color:var(--tx2)">판매(일자) 데이터가 없습니다.</div></div>';
+  let sel=S.weekSel;if(!sel||weeks.indexOf(sel)<0)sel=weeks[weeks.length-1];
+  const a=_weekAgg(sel);
+  const invItems=D.inv||[];
+  const invVal=invItems.reduce((s,i)=>s+(i.amount||0),0);
+  let shortCnt=0;invItems.forEach(i=>{const ss=(typeof calcSS==='function')?calcSS(i.sku_id):0;if(ss>0&&(i.qty||0)<=ss)shortCnt++});
+  const chg=a.prevAmt>0?((a.amt-a.prevAmt)/a.prevAmt*100):null;
+  const chgC=chg===null?'var(--tx2)':(chg>=0?'#16a34a':'#dc2626');
+  const maxDay=Math.max(1,...a.range.days.map(d=>a.byDay[d]));
+  const dow=['월','화','수','목','금','토','일'];
+  const cid='wkChart_'+Date.now();
+  setTimeout(()=>{
+    const el=document.getElementById(cid);if(!el||typeof Chart==='undefined')return;
+    new Chart(el,{type:'bar',data:{labels:a.range.days.map((d,i)=>dow[i]+' '+_wkMMDD(d)),datasets:[{label:'매출',data:a.range.days.map(d=>a.byDay[d]),backgroundColor:'rgba(37,99,235,.7)',borderRadius:4}]},
+      options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false},tooltip:{callbacks:{label:c=>fmt(c.parsed.y)+'원'}}},
+      scales:{y:{ticks:{callback:v=>fmt(v),color:'#475569',font:{size:9}},grid:{color:'rgba(100,116,139,.12)'}},x:{ticks:{color:'#475569',font:{size:10}},grid:{display:false}}}}});
+  },60);
+  const optHtml=weeks.slice().reverse().map(w=>{const rr=_weekRange(w);return`<option value="${w}" ${w===sel?'selected':''}>${w.slice(0,4)} · ${rr.label}</option>`}).join('');
+  const kpi=(lb,v,sb,c)=>`<div class="kc"><div class="lb">${lb}</div><div class="vl" style="color:${c||'var(--tx)'}">${v}</div>${sb?`<div class="sb">${sb}</div>`:''}</div>`;
+  let h=`<div class="pn"><div class="pt" style="justify-content:space-between">🗓️ 주간보고 <span class="badge">${a.range.label}</span>
+    <div style="display:flex;gap:8px;align-items:center;margin-left:auto">
+      <select aria-label="주차 선택" onchange="setWeek(this.value)" style="font-size:12px">${optHtml}</select>
+      <button class="xlsx-btn" style="background:linear-gradient(135deg,#1E2761,#2563eb);color:#fff" onclick="genWeeklyReport()">📑 주간보고 PPT</button>
+    </div></div>
+    <div class="kr" style="margin:12px 0">
+      ${kpi('주간 매출',fmtM(a.amt),chg===null?'전주 데이터 없음':'전주대비 '+(chg>=0?'+':'')+chg.toFixed(1)+'%',chgC)}
+      ${kpi('거래 건수',fmt(a.txCnt)+'건',a.custCnt+'개사 / 평균단가 '+fmtM(a.avg),'#2563eb')}
+      ${kpi('신규 거래처',a.newCusts.length+'개사',a.newCusts.slice(0,2).join(', ')||'-','#16a34a')}
+      ${kpi('이탈(전주)',a.churned.length+'개사',a.churned.slice(0,2).join(', ')||'-','#dc2626')}
+      ${kpi('주간 발주',fmtM(a.ordAmt),a.ordCnt+'건','#a855f7')}
+      ${kpi('현재 재고',fmtM(invVal),'부족 '+shortCnt+'건 / '+invItems.length+'품목','#0e7490')}
+    </div>
+    <div class="cc" style="height:220px"><canvas id="${cid}" aria-label="일별 매출"></canvas></div>
+  </div>`;
+  // 품목 TOP + 거래처 TOP
+  h+=`<div class="g2">
+    <div class="pn"><div class="pt">품목 TOP 10 <span class="badge">${a.range.label}</span></div>
+    <div class="st" style="max-height:320px"><table><thead><tr><th>#</th><th>품목</th><th class="tr">수량</th><th class="tr">매출</th><th class="tr">비중</th></tr></thead><tbody>
+    ${a.topItems.slice(0,10).map((it,i)=>`<tr class="clickable" onclick="openItemCusts('${it.sku}')"><td>${i+1}</td><td style="max-width:170px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${it.name}">${it.name}</td><td class="tr">${fmt(it.qty)}</td><td class="tr" style="font-weight:600">${fmtM(it.amt)}</td><td class="tr">${a.amt?(it.amt/a.amt*100).toFixed(1):0}%</td></tr>`).join('')||'<tr><td colspan="5" style="text-align:center;color:var(--tx2);padding:20px">판매 없음</td></tr>'}
+    </tbody></table></div></div>
+    <div class="pn"><div class="pt">거래처 TOP 10 <span class="badge">${a.range.label}</span></div>
+    <div class="st" style="max-height:320px"><table><thead><tr><th>#</th><th>거래처</th><th class="tr">매출</th><th class="tr">비중</th></tr></thead><tbody>
+    ${a.topCusts.slice(0,10).map((c,i)=>`<tr class="clickable" onclick="openCustItems('${c.name.replace(/'/g,"\\'")}')"><td>${i+1}</td><td style="max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${c.name}">${c.name}</td><td class="tr" style="font-weight:600">${fmtM(c.amt)}</td><td class="tr">${a.amt?(c.amt/a.amt*100).toFixed(1):0}%</td></tr>`).join('')||'<tr><td colspan="4" style="text-align:center;color:var(--tx2);padding:20px">판매 없음</td></tr>'}
+    </tbody></table></div></div>
+  </div>`;
+  // 발주 현황
+  h+=`<div class="pn"><div class="pt">이번주 발주 현황 <span class="badge">${a.range.label}</span></div>
+    <div class="st" style="max-height:240px"><table><thead><tr><th>#</th><th>업체</th><th class="tr">발주금액</th><th class="tr">비중</th></tr></thead><tbody>
+    ${a.ordByVendor.slice(0,10).map((v,i)=>`<tr><td>${i+1}</td><td>${v.name||'(미지정)'}</td><td class="tr" style="font-weight:600">${fmtM(v.amt)}</td><td class="tr">${a.ordAmt?(v.amt/a.ordAmt*100).toFixed(1):0}%</td></tr>`).join('')||'<tr><td colspan="4" style="text-align:center;color:var(--tx2);padding:20px">발주 없음</td></tr>'}
+    </tbody></table></div>
+    <div style="font-size:10px;color:var(--tx2);margin-top:6px">* 판매=일시불 기준 공급가액(구독렌탈 0원 제외) | 재고는 최신 월 스냅샷 | 발주는 발주일 기준</div></div>`;
+  return h;
+}
+function genWeeklyReport(){
+  if(typeof PptxGenJS==='undefined'){alert('PPT 라이브러리 로딩 중입니다. 잠시 후 다시 시도해주세요.');return}
+  const weeks=_weekList();if(!weeks.length){alert('판매 데이터가 없습니다.');return}
+  let sel=S.weekSel;if(!sel||weeks.indexOf(sel)<0)sel=weeks[weeks.length-1];
+  const a=_weekAgg(sel);
+  const F=n=>Math.round(n||0).toLocaleString();
+  const M=n=>((n||0)/1e6).toFixed(1)+'M';
+  const C={navy:'1E2761',blue:'2563EB',green:'16A34A',red:'DC2626',purple:'A855F7',teal:'0E7490',gray:'64748B',white:'FFFFFF',light:'F1F5F9'};
+  const chg=a.prevAmt>0?((a.amt-a.prevAmt)/a.prevAmt*100):null;
+  const invItems=D.inv||[];const invVal=invItems.reduce((s,i)=>s+(i.amount||0),0);
+  let shortCnt=0;invItems.forEach(i=>{const ss=(typeof calcSS==='function')?calcSS(i.sku_id):0;if(ss>0&&(i.qty||0)<=ss)shortCnt++});
+  const p=new PptxGenJS();p.layout='LAYOUT_16x9';p.author='BeaverWorks';p.title='주간보고 '+a.range.label;
+  const hdr=()=>({fill:C.navy,color:C.white,bold:true,fontSize:9,align:'center',valign:'middle'});
+  const hdrR=()=>({fill:C.navy,color:C.white,bold:true,fontSize:9,align:'right',valign:'middle'});
+  const border={type:'solid',color:'D1D5DB',pt:0.5};
+  // ── 표지 ──
+  const s1=p.addSlide();s1.background={color:C.navy};
+  s1.addText('주간 영업보고',{x:0.5,y:1.9,w:9,h:0.8,fontSize:40,fontFace:'Arial Black',color:C.white,align:'center'});
+  s1.addText(a.monStr.slice(0,4)+'년 · '+a.range.label,{x:0.5,y:2.9,w:9,h:0.5,fontSize:20,color:'C7D2FE',align:'center'});
+  s1.addText('BeaverWorks 통합관리 · 생성 '+_wkFmtD(new Date()),{x:0.5,y:4.6,w:9,h:0.3,fontSize:11,color:'94A3B8',align:'center'});
+  // ── 요약 KPI ──
+  const s2=p.addSlide();
+  s2.addText('📊 주간 요약',{x:0.4,y:0.3,w:9,h:0.5,fontSize:24,fontFace:'Arial Black',color:C.navy});
+  s2.addText(a.range.label+' 매출 '+M(a.amt)+(chg!==null?' (전주대비 '+(chg>=0?'+':'')+chg.toFixed(1)+'%)':''),{x:0.4,y:0.85,w:9,h:0.3,fontSize:12,color:C.gray});
+  const cards=[['주간 매출',M(a.amt),C.blue],['거래 건수',F(a.txCnt)+'건',C.navy],['거래처',F(a.custCnt)+'개사',C.teal],['평균단가',M(a.avg),C.purple],['신규/이탈',a.newCusts.length+' / '+a.churned.length,C.green],['주간 발주',M(a.ordAmt),C.red]];
+  cards.forEach((c,i)=>{const x=0.4+(i%3)*3.1,y=1.4+Math.floor(i/3)*1.5;
+    s2.addShape(p.ShapeType.roundRect,{x,y,w:2.9,h:1.3,fill:C.light,line:{color:'E2E8F0'},rectRadius:0.08});
+    s2.addText(c[0],{x:x+0.15,y:y+0.15,w:2.6,h:0.3,fontSize:11,color:C.gray});
+    s2.addText(c[1],{x:x+0.15,y:y+0.5,w:2.6,h:0.6,fontSize:24,bold:true,color:c[2]});});
+  // ── 일별 매출 ──
+  const s3=p.addSlide();
+  s3.addText('📈 일별 매출 추이',{x:0.4,y:0.3,w:9,h:0.5,fontSize:24,fontFace:'Arial Black',color:C.navy});
+  const dow=['월','화','수','목','금','토','일'];
+  s3.addChart(p.ChartType.bar,[{name:'매출',labels:a.range.days.map((d,i)=>dow[i]+' '+_wkMMDD(d)),values:a.range.days.map(d=>a.byDay[d])}],
+    {x:0.5,y:1.1,w:9,h:4.0,barDir:'col',chartColors:[C.blue],showValue:false,catAxisLabelColor:'334155',valAxisLabelColor:'334155',valAxisLabelFontSize:9,catAxisLabelFontSize:11});
+  // ── 품목 TOP10 ──
+  const s4=p.addSlide();
+  s4.addText('📦 품목 TOP 10',{x:0.4,y:0.3,w:9,h:0.5,fontSize:24,fontFace:'Arial Black',color:C.navy});
+  const ir=[[{text:'#',options:hdr()},{text:'품목',options:hdr()},{text:'수량',options:hdrR()},{text:'매출',options:hdrR()},{text:'비중',options:hdrR()}]];
+  a.topItems.slice(0,10).forEach((it,i)=>ir.push([{text:String(i+1),options:{fontSize:9,align:'center'}},{text:it.name,options:{fontSize:8}},{text:F(it.qty),options:{align:'right',fontSize:9}},{text:M(it.amt),options:{align:'right',fontSize:9,bold:true}},{text:(a.amt?(it.amt/a.amt*100).toFixed(1):0)+'%',options:{align:'right',fontSize:9}}]));
+  s4.addTable(ir,{x:0.4,y:1.0,w:9.2,colW:[0.5,5.0,1.2,1.5,1.0],border,rowH:0.32,valign:'middle'});
+  // ── 거래처 TOP10 + 신규/이탈 ──
+  const s5=p.addSlide();
+  s5.addText('🏢 거래처 TOP 10 · 신규/이탈',{x:0.4,y:0.3,w:9,h:0.5,fontSize:24,fontFace:'Arial Black',color:C.navy});
+  const cr=[[{text:'#',options:hdr()},{text:'거래처',options:hdr()},{text:'매출',options:hdrR()},{text:'비중',options:hdrR()}]];
+  a.topCusts.slice(0,10).forEach((c,i)=>cr.push([{text:String(i+1),options:{fontSize:9,align:'center'}},{text:c.name,options:{fontSize:8}},{text:M(c.amt),options:{align:'right',fontSize:9,bold:true}},{text:(a.amt?(c.amt/a.amt*100).toFixed(1):0)+'%',options:{align:'right',fontSize:9}}]));
+  s5.addTable(cr,{x:0.4,y:1.0,w:6.0,colW:[0.5,3.5,1.2,0.8],border,rowH:0.30,valign:'middle'});
+  s5.addText([{text:'🟢 신규 ('+a.newCusts.length+'개사)\n',options:{bold:true,color:C.green,fontSize:12}},{text:(a.newCusts.slice(0,12).join('\n')||'-'),options:{fontSize:9,color:'334155'}}],{x:6.6,y:1.0,w:3.0,h:2.3,valign:'top'});
+  s5.addText([{text:'🔴 이탈 (전주, '+a.churned.length+'개사)\n',options:{bold:true,color:C.red,fontSize:12}},{text:(a.churned.slice(0,12).join('\n')||'-'),options:{fontSize:9,color:'334155'}}],{x:6.6,y:3.4,w:3.0,h:2.0,valign:'top'});
+  // ── 발주 + 재고 ──
+  const s6=p.addSlide();
+  s6.addText('📋 발주 · 재고 현황',{x:0.4,y:0.3,w:9,h:0.5,fontSize:24,fontFace:'Arial Black',color:C.navy});
+  s6.addText('이번주 발주 '+M(a.ordAmt)+' ('+a.ordCnt+'건)',{x:0.4,y:0.9,w:9,h:0.3,fontSize:12,bold:true,color:C.gray});
+  const orr=[[{text:'#',options:hdr()},{text:'업체',options:hdr()},{text:'발주금액',options:hdrR()},{text:'비중',options:hdrR()}]];
+  a.ordByVendor.slice(0,8).forEach((v,i)=>orr.push([{text:String(i+1),options:{fontSize:9,align:'center'}},{text:v.name||'(미지정)',options:{fontSize:8}},{text:M(v.amt),options:{align:'right',fontSize:9,bold:true}},{text:(a.ordAmt?(v.amt/a.ordAmt*100).toFixed(1):0)+'%',options:{align:'right',fontSize:9}}]));
+  if(orr.length===1)orr.push([{text:'발주 없음',options:{colspan:4,align:'center',color:C.gray,fontSize:9}}]);
+  s6.addTable(orr,{x:0.4,y:1.3,w:5.6,colW:[0.5,3.3,1.0,0.8],border,rowH:0.30,valign:'middle'});
+  s6.addShape(p.ShapeType.roundRect,{x:6.4,y:1.3,w:3.2,h:1.2,fill:C.light,line:{color:'E2E8F0'},rectRadius:0.08});
+  s6.addText('현재 총 재고금액',{x:6.55,y:1.45,w:2.9,h:0.3,fontSize:11,color:C.gray});
+  s6.addText(M(invVal),{x:6.55,y:1.75,w:2.9,h:0.6,fontSize:26,bold:true,color:C.teal});
+  s6.addShape(p.ShapeType.roundRect,{x:6.4,y:2.7,w:3.2,h:1.2,fill:C.light,line:{color:'E2E8F0'},rectRadius:0.08});
+  s6.addText('재고부족(안전재고 미달)',{x:6.55,y:2.85,w:2.9,h:0.3,fontSize:11,color:C.gray});
+  s6.addText(shortCnt+'건',{x:6.55,y:3.15,w:2.9,h:0.6,fontSize:26,bold:true,color:shortCnt>0?C.red:C.green});
+  const fn='주간보고_'+a.range.label.replace(/\//g,'')+'.pptx';
+  p.writeFile({fileName:fn}).then(()=>{}).catch(e=>alert('PPT 생성 오류: '+e.message));
 }
 
 // ========== INIT ==========
