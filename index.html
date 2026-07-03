@@ -2326,6 +2326,7 @@ function pgSales(){
         ${selMs.map(m=>`<th class="sortable tr" onclick="toggleSalesSort('${isAmt?'a':'q'}_${m}')">${m.slice(5)}월 ${S.salesSort.col===(isAmt?'a_':'q_')+m?(S.salesSort.dir==='asc'?'▲':'▼'):''}</th>`).join('')}
         <th class="sortable tr" onclick="toggleSalesSort('${isAmt?'total_amt':'total_qty'}')">합계 ${S.salesSort.col===(isAmt?'total_amt':'total_qty')?(S.salesSort.dir==='asc'?'▲':'▼'):''}</th>
         <th class="sortable tr" onclick="toggleSalesSort('avg_price')">평균단가 ${S.salesSort.col==='avg_price'?(S.salesSort.dir==='asc'?'▲':'▼'):''}</th>
+        <th class="sortable tr" onclick="toggleSalesSort('rent')" title="구독렌탈(공급가액 0원 & 할부금액>0) 수량">구독렌탈 ${S.salesSort.col==='rent'?(S.salesSort.dir==='asc'?'▲':'▼'):''}</th>
       </tr></thead>
       <tbody>${(()=>{
         // 평균단가용: 구독렌탈(0원) 제외한 일시불 판매수량 (selMs 기준)
@@ -2344,7 +2345,8 @@ function pgSales(){
         list=list.map(i=>{
           const pQty=selMs.reduce((s,m)=>s+(i.monthly[m]?i.monthly[m].qty:0),0);
           const pAmt=selMs.reduce((s,m)=>s+(i.monthly[m]?i.monthly[m].amt:0),0);
-          return{...i,pQty,pAmt};
+          const pRent=selMs.reduce((s,m)=>s+(i.monthly[m]?(i.monthly[m].rq||0):0),0);
+          return{...i,pQty,pAmt,pRent};
         }).filter(i=>i.pQty>0||i.pAmt>0);
         const sGetter=(i,col)=>{
           if(col==='cat'){const cat=getSkuCat(i.sku_id);return catMap[cat]||cat}
@@ -2352,6 +2354,7 @@ function pgSales(){
           if(col==='total_qty')return i.pQty||0;
           if(col==='total_amt')return i.pAmt||0;
           if(col==='avg_price'){const pq=paidQByItem[i.sku_id]||0;return pq>0?i.pAmt/pq:0;}
+          if(col==='rent')return i.pRent||0;
           if(col.startsWith('q_')){const m=col.slice(2);return i.monthly[m]?i.monthly[m].qty||0:0}
           if(col.startsWith('a_')){const m=col.slice(2);return i.monthly[m]?i.monthly[m].amt||0:0}
           return 0;
@@ -2365,8 +2368,9 @@ function pgSales(){
           <td style="max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${i.name}">${i.name}</td>
           ${selMs.map(m=>{const d=i.monthly[m];return`<td class="tr">${d?(isAmt?fmtM(d.amt):fmt(d.qty)):'-'}</td>`}).join('')}
           <td class="tr" style="font-weight:600">${isAmt?fmtM(i.pAmt):fmt(i.pQty)}</td>
-          <td class="tr" style="color:var(--ac2)">${(paidQByItem[i.sku_id]||0)>0?fmtM(i.pAmt/paidQByItem[i.sku_id]):'-'}</td></tr>`}).join('')})()}</tbody></table></div>
-    <div style="font-size:10px;color:var(--tx2);margin-top:6px">* 행 클릭→품목별 거래처 상세 | 최대 100건</div></div>`;
+          <td class="tr" style="color:var(--ac2)">${(paidQByItem[i.sku_id]||0)>0?fmtM(i.pAmt/paidQByItem[i.sku_id]):'-'}</td>
+          <td class="tr" style="color:#a855f7">${i.pRent>0?fmt(i.pRent):'-'}</td></tr>`}).join('')})()}</tbody></table></div>
+    <div style="font-size:10px;color:var(--tx2);margin-top:6px">* 행 클릭→품목별 거래처 상세 | 구독렌탈=공급가액 0원·할부금액>0 수량 | 최대 100건</div></div>`;
   }
 
   // ══════════ TAB: 거래처별 ══════════
@@ -2391,14 +2395,15 @@ function pgSales(){
       const cl=src.map(c=>{
         const pAmt=selMs.reduce((s,m)=>s+(c.monthly[m]?c.monthly[m].amt:0),0);
         const pQty=selMs.reduce((s,m)=>s+(c.monthly[m]?c.monthly[m].qty:0),0);
-        return{name:c.name,tp:c.tp||'',monthly:c.monthly,pTotal:pAmt,pQty:pQty};
+        const pRent=selMs.reduce((s,m)=>s+(c.monthly[m]?(c.monthly[m].rq||0):0),0);
+        return{name:c.name,tp:c.tp||'',monthly:c.monthly,pTotal:pAmt,pQty:pQty,pRent:pRent};
       }).filter(c=>c.pTotal>0||c.pQty>0).sort((a,b)=>isAmt?(b.pTotal-a.pTotal):(b.pQty-a.pQty));
       const grandTotal=cl.reduce((s,c)=>s+c.pTotal,0);
       const grandQty=cl.reduce((s,c)=>s+c.pQty,0);
       const typeLabels={C:'제품판매',B:'상품판매',S:'서비스매출'};
       return'<div style="font-size:11px;color:var(--tx2);margin-bottom:6px">'+(useType?typeLabels[S.custSaleType]+' ':'')+cl.length+'개사 / '+(isAmt?fmtM(grandTotal):fmt(grandQty)+'개')+'</div>'
         +'<div class="st" style="max-height:500px"><table>'
-        +'<thead><tr><th>#</th>'+(useType?'':'<th>유형</th>')+'<th>거래처</th>'+selMs.map(m=>'<th class="tr">'+m.slice(5)+'월</th>').join('')+'<th class="tr" style="font-weight:700">합계</th><th class="tr">비중</th></tr></thead>'
+        +'<thead><tr><th>#</th>'+(useType?'':'<th>유형</th>')+'<th>거래처</th>'+selMs.map(m=>'<th class="tr">'+m.slice(5)+'월</th>').join('')+'<th class="tr" style="font-weight:700">합계</th><th class="tr">비중</th><th class="tr" title="구독렌탈(공급가액 0원·할부금액>0) 수량">구독렌탈</th></tr></thead>'
         +'<tbody>'+cl.slice(0,100).map((c,i)=>{
           const tpTypes=(D.csd_type||[]).filter(t=>t.name===c.name).map(t=>t.tp);
           const tpTag=tpTypes.length===0?'<span class="tg tg-y">서비스</span>':tpTypes.map(t=>t==='C'?'<span class="tg tg-b">제품</span>':t==='B'?'<span class="tg tg-c">상품</span>':'<span class="tg tg-y">서비스</span>').join(' ');
@@ -2408,7 +2413,8 @@ function pgSales(){
             +'<td style="max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="'+c.name.replace(/"/g,'&quot;')+'">'+c.name+'</td>'
             +selMs.map(m=>{const d=c.monthly[m];return'<td class="tr">'+(d?(isAmt?fmtM(d.amt):fmt(d.qty)):'-')+'</td>'}).join('')
             +'<td class="tr" style="font-weight:600">'+(isAmt?fmtM(c.pTotal):fmt(c.pQty))+'</td>'
-            +'<td class="tr">'+pct(cVal,gVal)+'%</td></tr>'}).join('')
+            +'<td class="tr">'+pct(cVal,gVal)+'%</td>'
+            +'<td class="tr" style="color:#a855f7">'+(c.pRent>0?fmt(c.pRent):'-')+'</td></tr>'}).join('')
         +'</tbody></table></div>'
     })()}
     <div style="font-size:10px;color:var(--tx2);margin-top:6px">* 행 클릭→거래처 상세 | C=제품판매 B=상품판매 그외=서비스매출 | 최대 100건</div>

@@ -365,6 +365,7 @@ function parseSales(rows, codeMap) {
       name: _s(row[5]),
       qty: _ni(row[6]),
       price: Math.round(_n(row[7])),
+      installment: Math.round(_n(row[8])), // 할부금액(합계) — 구독렌탈/할부 식별용 (공급가액 0 & 할부>0)
       supply_amt: Math.round(_n(row[9])),
       vat: Math.round(_n(row[10])),
       total: Math.round(_n(row[11])),
@@ -382,9 +383,10 @@ function parseSales(rows, codeMap) {
     const mk = _dateToMonth(r.date);
     if (!isdAgg[r.sku_id]) isdAgg[r.sku_id] = { name: '', monthly: {} };
     isdAgg[r.sku_id].name = r.name;
-    if (!isdAgg[r.sku_id].monthly[mk]) isdAgg[r.sku_id].monthly[mk] = { qty: 0, amt: 0 };
+    if (!isdAgg[r.sku_id].monthly[mk]) isdAgg[r.sku_id].monthly[mk] = { qty: 0, amt: 0, rq: 0 };
     isdAgg[r.sku_id].monthly[mk].qty += r.qty;
     isdAgg[r.sku_id].monthly[mk].amt += r.supply_amt;
+    if (r.supply_amt === 0 && r.installment > 0) isdAgg[r.sku_id].monthly[mk].rq += r.qty; // 구독렌탈 수량
   }
   const isd = Object.entries(isdAgg).map(([k, v]) => ({
     sku_id: k, name: v.name,
@@ -398,10 +400,11 @@ function parseSales(rows, codeMap) {
     const mk = _dateToMonth(r.date);
     if (!csdAgg[r.cust_name]) csdAgg[r.cust_name] = { code: '', monthly: {} };
     csdAgg[r.cust_name].code = r.cust_code;
-    if (!csdAgg[r.cust_name].monthly[mk]) csdAgg[r.cust_name].monthly[mk] = { qty: 0, amt: 0, cnt: 0 };
+    if (!csdAgg[r.cust_name].monthly[mk]) csdAgg[r.cust_name].monthly[mk] = { qty: 0, amt: 0, cnt: 0, rq: 0 };
     csdAgg[r.cust_name].monthly[mk].qty += r.qty;
     csdAgg[r.cust_name].monthly[mk].amt += r.supply_amt;
     csdAgg[r.cust_name].monthly[mk].cnt += 1;
+    if (r.supply_amt === 0 && r.installment > 0) csdAgg[r.cust_name].monthly[mk].rq += r.qty; // 구독렌탈 수량
   }
   const csd = Object.entries(csdAgg).map(([k, v]) => ({
     cust_code: v.code, cust_name: k, name: k, monthly: v.monthly,
@@ -414,9 +417,10 @@ function parseSales(rows, codeMap) {
     const key = `${r.sku_id}||${r.cust_name}`;
     if (!csiAgg[key]) csiAgg[key] = { ic: r.sku_id, c: r.cust_name, n: '', ml: {} };
     csiAgg[key].n = r.name;
-    if (!csiAgg[key].ml[mk]) csiAgg[key].ml[mk] = { q: 0, a: 0 };
+    if (!csiAgg[key].ml[mk]) csiAgg[key].ml[mk] = { q: 0, a: 0, rq: 0 };
     csiAgg[key].ml[mk].q += r.qty;
     csiAgg[key].ml[mk].a += r.supply_amt;
+    if (r.supply_amt === 0 && r.installment > 0) csiAgg[key].ml[mk].rq += r.qty; // 구독렌탈 수량
   }
   const csi = Object.values(csiAgg);
 
@@ -427,10 +431,11 @@ function parseSales(rows, codeMap) {
     const tp = r.sku_id.startsWith('C-') ? 'C' : r.sku_id.startsWith('B-') ? 'B' : 'S';
     const key = `${r.cust_name}||${tp}`;
     if (!csdTypeAgg[key]) csdTypeAgg[key] = { tp, name: r.cust_name, monthly: {} };
-    if (!csdTypeAgg[key].monthly[mk]) csdTypeAgg[key].monthly[mk] = { qty: 0, amt: 0, cnt: 0 };
+    if (!csdTypeAgg[key].monthly[mk]) csdTypeAgg[key].monthly[mk] = { qty: 0, amt: 0, cnt: 0, rq: 0 };
     csdTypeAgg[key].monthly[mk].qty += r.qty;
     csdTypeAgg[key].monthly[mk].amt += r.supply_amt;
     csdTypeAgg[key].monthly[mk].cnt += 1;
+    if (r.supply_amt === 0 && r.installment > 0) csdTypeAgg[key].monthly[mk].rq += r.qty; // 구독렌탈 수량
   }
   const csdType = Object.values(csdTypeAgg);
 
