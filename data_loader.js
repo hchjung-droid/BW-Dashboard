@@ -52,16 +52,26 @@ async function fetchSheet(sheetKey, opts = {}) {
     return [];
   }
   console.log(`[DataLoader] Fetching ${sheetKey}...`);
-  const resp = await fetch(url);
-  if (!resp.ok) throw new Error(`Failed to fetch ${sheetKey}: ${resp.status}`);
-  const text = await resp.text();
-  const result = Papa.parse(text, { skipEmptyLines: true });
-  if (result.errors.length) {
-    console.warn(`[DataLoader] CSV parse warnings for ${sheetKey}:`, result.errors);
+  // ★ 복원력: 개별 시트가 실패(410/삭제/공유해제 등)해도 전체 로드를 중단하지 않고
+  //   빈 데이터로 계속 → 한 시트가 죽어도 나머지로 대시보드가 정상 표시된다.
+  try {
+    const resp = await fetch(url);
+    if (!resp.ok) {
+      console.warn(`[DataLoader] ⚠️ ${sheetKey} fetch 실패(status ${resp.status}) — 빈 데이터로 계속`);
+      return [];
+    }
+    const text = await resp.text();
+    const result = Papa.parse(text, { skipEmptyLines: true });
+    if (result.errors.length) {
+      console.warn(`[DataLoader] CSV parse warnings for ${sheetKey}:`, result.errors);
+    }
+    // opts.skipRows: 헤더/빈 행 스킵 (기본 0)
+    const skip = opts.skipRows || 0;
+    return result.data.slice(skip);
+  } catch (e) {
+    console.warn(`[DataLoader] ⚠️ ${sheetKey} fetch 예외 — 빈 데이터로 계속:`, e && e.message);
+    return [];
   }
-  // opts.skipRows: 헤더/빈 행 스킵 (기본 0)
-  const skip = opts.skipRows || 0;
-  return result.data.slice(skip);
 }
 
 // ============================================================
