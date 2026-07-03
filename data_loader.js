@@ -383,10 +383,11 @@ function parseSales(rows, codeMap) {
     const mk = _dateToMonth(r.date);
     if (!isdAgg[r.sku_id]) isdAgg[r.sku_id] = { name: '', monthly: {} };
     isdAgg[r.sku_id].name = r.name;
-    if (!isdAgg[r.sku_id].monthly[mk]) isdAgg[r.sku_id].monthly[mk] = { qty: 0, amt: 0, rq: 0 };
+    if (!isdAgg[r.sku_id].monthly[mk]) isdAgg[r.sku_id].monthly[mk] = { qty: 0, amt: 0, rq: 0, pq: 0 };
     isdAgg[r.sku_id].monthly[mk].qty += r.qty;
     isdAgg[r.sku_id].monthly[mk].amt += r.supply_amt;
-    if (r.supply_amt === 0 && r.installment > 0) isdAgg[r.sku_id].monthly[mk].rq += r.qty; // 구독렌탈 수량
+    if (r.supply_amt !== 0) isdAgg[r.sku_id].monthly[mk].pq += r.qty;              // 일시불 수량 (공급가액≠0)
+    else if (r.installment > 0) isdAgg[r.sku_id].monthly[mk].rq += r.qty;          // 구독렌탈할부 수량 (공급가액0·할부>0)
   }
   const isd = Object.entries(isdAgg).map(([k, v]) => ({
     sku_id: k, name: v.name,

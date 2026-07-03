@@ -2244,13 +2244,15 @@ function pgSales(){
   const salesByCat={};
   D.isd.forEach(i=>{
     const cat=getSkuCat(i.sku_id);const catNm=catMap[cat]||cat;
-    if(!salesByCat[cat]) salesByCat[cat]={cat,catNm,qty:0,amt:0,monthly:{},items:0};
+    if(!salesByCat[cat]) salesByCat[cat]={cat,catNm,qty:0,amt:0,paid:0,rent:0,monthly:{},items:0};
     salesByCat[cat].items++;
     selMs.forEach(m=>{
       const d=i.monthly[m];
       if(d){
         salesByCat[cat].qty+=(d.qty||0);
         salesByCat[cat].amt+=(d.amt||0);
+        salesByCat[cat].paid+=(d.pq||0);
+        salesByCat[cat].rent+=(d.rq||0);
         if(!salesByCat[cat].monthly[m]) salesByCat[cat].monthly[m]={qty:0,amt:0};
         salesByCat[cat].monthly[m].qty+=(d.qty||0);
         salesByCat[cat].monthly[m].amt+=(d.amt||0);
@@ -2290,13 +2292,14 @@ function pgSales(){
   <div class="pn"><div class="pt" style="justify-content:space-between">대분류별 매출 집계 <span class="badge">${mLabel}</span>
     <div class="btn-group" style="margin-left:auto"><div class="btn ${isAmt?'active':''}" onclick="S.salesView='amt';render()">금액</div><div class="btn ${!isAmt?'active':''}" onclick="S.salesView='qty';render()">수량</div></div><button class="xlsx-btn" onclick="exportTableCSV(this,'대분류별매출')">📥 엑셀</button></div>
     <div class="st" style="max-height:350px"><table>
-      <thead><tr><th>대분류</th><th>명칭</th><th class="tr">품목수</th>${selMs.map(m=>`<th class="tr">${m.slice(5)}월</th>`).join('')}<th class="tr" style="font-weight:700">합계</th><th class="tr">비중</th></tr></thead>
+      <thead><tr><th>대분류</th><th>명칭</th><th class="tr">품목수</th><th class="tr" title="일시불(공급가액≠0) 수량">일시불</th><th class="tr" title="구독렌탈할부(공급가액0·할부>0) 수량">구독렌탈</th>${selMs.map(m=>`<th class="tr">${m.slice(5)}월</th>`).join('')}<th class="tr" style="font-weight:700">합계</th><th class="tr">비중</th></tr></thead>
       <tbody>${catList.map(c=>{const cTot=isAmt?c.amt:c.qty;const gTot=isAmt?selTotal:selQty;return`<tr class="clickable" onclick="openCatDetail('${c.cat}')">
-        <td><span class="tg tg-p">${c.cat}</span></td><td>${c.catNm}</td><td class="tr">${c.items}종</td>
+        <td><span class="tg tg-p">${c.cat}</span></td><td>${c.catNm}</td><td class="tr">${c.items}종</td><td class="tr">${fmt(c.paid||0)}</td><td class="tr" style="color:#a855f7">${(c.rent||0)>0?fmt(c.rent):'-'}</td>
         ${selMs.map(m=>`<td class="tr">${c.monthly[m]?(isAmt?fmtM(c.monthly[m].amt)+' <span style="color:var(--tx2);font-size:9px">('+fmt(c.monthly[m].qty)+')</span>':fmt(c.monthly[m].qty)+' <span style="color:var(--tx2);font-size:9px">('+fmtM(c.monthly[m].amt)+')</span>'):'-'}</td>`).join('')}
         <td class="tr" style="font-weight:700">${isAmt?fmtM(cTot):fmt(cTot)}</td>
         <td class="tr">${pct(cTot,gTot)}%</td></tr>`}).join('')}
       <tr style="font-weight:700;border-top:2px solid var(--bd)"><td colspan="3">합계</td>
+        <td class="tr">${fmt(catList.reduce((s,c)=>s+(c.paid||0),0))}</td><td class="tr" style="color:#a855f7">${fmt(catList.reduce((s,c)=>s+(c.rent||0),0))}</td>
         ${selMs.map(m=>{const ma=catList.reduce((s,c)=>s+(c.monthly[m]?c.monthly[m].amt:0),0);const mq=catList.reduce((s,c)=>s+(c.monthly[m]?c.monthly[m].qty:0),0);return`<td class="tr">${isAmt?fmtM(ma)+' <span style="color:var(--tx2);font-size:9px">('+fmt(mq)+')</span>':fmt(mq)+' <span style="color:var(--tx2);font-size:9px">('+fmtM(ma)+')</span>'}</td>`}).join('')}
         <td class="tr">${isAmt?fmtM(selTotal):fmt(selQty)}</td><td class="tr">100%</td></tr></tbody></table></div></div>`;
   }
@@ -2810,9 +2813,9 @@ function _salesCategory(selMs,mLabel,isAmt){
     const cat=getSkuCat(i.sku_id);const catNm=catMap[cat]||cat;
     const prefix=i.sku_id.startsWith('C-')?'C':'B';
     const key=prefix+'-'+cat;
-    if(!catAgg[key])catAgg[key]={key,cat,catNm,prefix,qty:0,amt:0,items:0,monthly:{}};
+    if(!catAgg[key])catAgg[key]={key,cat,catNm,prefix,qty:0,amt:0,paid:0,rent:0,items:0,monthly:{}};
     catAgg[key].items++;
-    selMs.forEach(m=>{const d=i.monthly[m];if(d){catAgg[key].qty+=(d.qty||0);catAgg[key].amt+=(d.amt||0)}});
+    selMs.forEach(m=>{const d=i.monthly[m];if(d){catAgg[key].qty+=(d.qty||0);catAgg[key].amt+=(d.amt||0);catAgg[key].paid+=(d.pq||0);catAgg[key].rent+=(d.rq||0)}});
     selMs.forEach(m=>{
       if(!catAgg[key].monthly[m])catAgg[key].monthly[m]={qty:0,amt:0};
       const d=i.monthly[m];if(d){catAgg[key].monthly[m].qty+=(d.qty||0);catAgg[key].monthly[m].amt+=(d.amt||0)}
@@ -2844,6 +2847,7 @@ function _salesCategory(selMs,mLabel,isAmt){
   h+=`<div class="st" style="max-height:500px;margin-top:12px"><table>
     <thead><tr>
       <th>#</th><th>구분</th><th>대분류</th><th class="tr">품목수</th><th class="tr">수량</th>
+      <th class="tr" title="일시불(공급가액≠0) 수량">일시불</th><th class="tr" title="구독렌탈할부(공급가액0·할부>0) 수량">구독렌탈</th>
       <th class="tr">매출액</th><th class="tr">비중</th>
       ${selMs.map(m=>`<th class="tr">${m.slice(5)}월</th>`).join('')}
     </tr></thead>
@@ -2855,6 +2859,8 @@ function _salesCategory(selMs,mLabel,isAmt){
         <td style="font-weight:500">${c.catNm}</td>
         <td class="tr">${c.items}</td>
         <td class="tr">${fmt(c.qty)}</td>
+        <td class="tr">${fmt(c.paid||0)}</td>
+        <td class="tr" style="color:#a855f7">${(c.rent||0)>0?fmt(c.rent):'-'}</td>
         <td class="tr" style="font-weight:600">${fmtM(c.amt)}</td>
         <td class="tr">${pct(val,gVal)}%</td>
         ${selMs.map(m=>`<td class="tr">${c.monthly[m]?(isAmt?fmtM(c.monthly[m].amt)+' <span style="color:var(--tx2);font-size:9px">('+fmt(c.monthly[m].qty)+')</span>':fmt(c.monthly[m].qty)+' <span style="color:var(--tx2);font-size:9px">('+fmtM(c.monthly[m].amt)+')</span>'):'-'}</td>`).join('')}
