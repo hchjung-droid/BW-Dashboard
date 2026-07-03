@@ -165,7 +165,16 @@ async function _initDashboard(){
     M25=Array.from({length:12},(_,i)=>`2025-${String(i+1).padStart(2,'0')}`);
     S.selYear=M26_DATA[M26_DATA.length-1].slice(0,4);
     S.selMonth=M26_DATA[M26_DATA.length-1].slice(5);
-    skuMap={};D.sku.forEach(s=>{skuMap[s.id]=s});
+    skuMap={};(D.sku||[]).forEach(s=>{skuMap[s.id]=s});
+    // ★ 품목코드 시트가 없거나 SKU가 누락돼도 대분류(냉장고/배리어프리/비버 등 품명 기반)가
+    //   틀리지 않도록, 거래·재고 데이터의 품목명으로 skuMap을 보강한다.
+    (function(){
+      const fill=(id,nm)=>{if(!id||!nm)return;if(!skuMap[id])skuMap[id]={id:id,name:nm};else if(!(skuMap[id].name||skuMap[id].n))skuMap[id].name=nm};
+      (D.inv||[]).forEach(i=>fill(i.sku_id,i.item_name||i.name));
+      (D.isd||[]).forEach(i=>fill(i.sku_id,i.name));
+      (D.sales_tx||[]).forEach(t=>fill(t.sku_id,t.name));
+      (D.po||[]).forEach(o=>fill(o.sku_id,o.item_name));
+    })();
     mio=D.mio||{};
     DATA_MONTHS=[...M25,...M26_DATA];
     window.hasData=function(mk){return M26_DATA.includes(mk)||M25.includes(mk)};
