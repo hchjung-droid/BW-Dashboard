@@ -2265,7 +2265,7 @@ function pgSales(){
 
   const isAmt=S.salesView==='amt';
   const tab=S.salesTab||'overview';
-  const _stabs=[{id:'overview',lb:'📊 개요'},{id:'items',lb:'📦 품목별'},{id:'custs',lb:'🏢 거래처별'},{id:'cust_trend',lb:'📈 거래처추이'},{id:'abc',lb:'🎯 ABC분석'},{id:'churn',lb:'🔄 신규/이탈'},{id:'category',lb:'📂 대분류별'}];
+  const _stabs=[{id:'overview',lb:'📊 개요'},{id:'items',lb:'📦 품목별'},{id:'custs',lb:'🏢 거래처별'},{id:'cust_trend',lb:'📈 거래처추이'},{id:'abc',lb:'🎯 ABC분석'},{id:'churn',lb:'🔄 신규/이탈'},{id:'category',lb:'📂 대분류별'},{id:'rental',lb:'🔁 구독렌탈'}];
 
   // ── Header + Tab bar (always visible) ──
   let h=`<div class="kpi-sticky"><div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px"><h2 style="font-size:18px">판매 분석</h2><div style="display:flex;gap:8px;align-items:center"><button class="btn" onclick="exportSalesInsight()" style="padding:5px 12px;font-size:11px;background:var(--accent);color:#fff;border:none;border-radius:6px;cursor:pointer" title="판매분석 인사이트 보고서 PPT 추출">📄 인사이트 보고서</button>${periodBar()}</div></div>
@@ -2455,7 +2455,56 @@ function pgSales(){
   else if(tab==='category'){
     h+=_salesCategory(selMs,mLabel,isAmt);
   }
+  else if(tab==='rental'){
+    h+=_salesRental(selMs,mLabel);
+  }
 
+  return h;
+}
+
+// ─── 구독렌탈할부 상세 서브탭 ───
+// 구독렌탈할부 = 공급가액 0원 & 할부금액>0 거래 (효성CMS 할부/자체렌탈, 오더퀸·비버웍스 구독 등)
+function _salesRental(selMs,mLabel){
+  const catMap={...C_CATS,...B_CATS};
+  const inSel=d=>{const mk=(d||'').substring(0,7).replace('/','-');return selMs.indexOf(mk)>=0};
+  const rtx=(D.sales_tx||[]).filter(t=>t.date&&inSel(t.date)&&(t.amt||0)===0&&(t.inst||0)>0);
+  if(!rtx.length)return`<div class="pn"><div class="pt">🔁 구독렌탈할부 상세 <span class="badge">${mLabel}</span></div><div style="padding:40px;text-align:center;color:var(--tx2)">선택 기간에 구독렌탈할부 거래가 없습니다.<br><span style="font-size:11px">구독렌탈할부 = 공급가액 0원 & 할부금액 > 0</span></div></div>`;
+  let totQ=0,totInst=0;const custs={},items={},byMonth={};
+  selMs.forEach(m=>byMonth[m]={q:0,inst:0});
+  rtx.forEach(t=>{
+    const q=t.qty||0,ins=t.inst||0;totQ+=q;totInst+=ins;
+    const mk=(t.date||'').substring(0,7).replace('/','-');if(byMonth[mk]){byMonth[mk].q+=q;byMonth[mk].inst+=ins}
+    if(!custs[t.cust])custs[t.cust]={q:0,inst:0,items:new Set()};custs[t.cust].q+=q;custs[t.cust].inst+=ins;custs[t.cust].items.add(t.sku_id);
+    if(!items[t.sku_id])items[t.sku_id]={name:t.name,q:0,inst:0,custs:new Set()};items[t.sku_id].q+=q;items[t.sku_id].inst+=ins;items[t.sku_id].custs.add(t.cust);
+  });
+  const itemArr=Object.keys(items).map(s=>({sku:s,name:items[s].name,q:items[s].q,inst:items[s].inst,cn:items[s].custs.size})).sort((a,b)=>b.q-a.q);
+  const custArr=Object.keys(custs).map(c=>({name:c,q:custs[c].q,inst:custs[c].inst,it:custs[c].items.size})).sort((a,b)=>b.q-a.q);
+  const kpi=(lb,v,sb,c)=>`<div class="kc"><div class="lb">${lb}</div><div class="vl" style="color:${c||'var(--tx)'}">${v}</div>${sb?`<div class="sb">${sb}</div>`:''}</div>`;
+  let h=`<div class="pn"><div class="pt" style="justify-content:space-between">🔁 구독렌탈할부 상세 <span class="badge">${mLabel}</span>
+    <button class="xlsx-btn" onclick="exportTableCSV(this,'구독렌탈품목')" style="margin-left:auto">📥 엑셀</button></div>
+    <div class="kr" style="margin:12px 0">
+      ${kpi('총 구독렌탈 수량',fmt(totQ)+'대','#a855f7')}
+      ${kpi('총 할부금액',fmtM(totInst),'월 할부료 합계','#2563eb')}
+      ${kpi('거래처 수',custArr.length+'개사','','#0e7490')}
+      ${kpi('품목 수',itemArr.length+'종','','#16a34a')}
+    </div>
+    <div style="font-size:11px;color:var(--tx2);margin-bottom:8px">* 구독렌탈할부 = 공급가액 0원 & 할부금액 > 0 (일시불 제외) | 할부금액은 월 렌탈/구독료 합계</div>`;
+  // 월별 추이
+  h+=`<div class="st" style="max-height:150px;margin-bottom:12px"><table><thead><tr><th>구분</th>${selMs.map(m=>`<th class="tr">${m.slice(5)}월</th>`).join('')}<th class="tr" style="font-weight:700">합계</th></tr></thead><tbody>
+    <tr><td>수량(대)</td>${selMs.map(m=>`<td class="tr">${byMonth[m].q>0?fmt(byMonth[m].q):'-'}</td>`).join('')}<td class="tr" style="font-weight:700;color:#a855f7">${fmt(totQ)}</td></tr>
+    <tr><td>할부금액</td>${selMs.map(m=>`<td class="tr">${byMonth[m].inst>0?fmtM(byMonth[m].inst):'-'}</td>`).join('')}<td class="tr" style="font-weight:700;color:#2563eb">${fmtM(totInst)}</td></tr>
+    </tbody></table></div>`;
+  // 품목별 + 거래처별
+  h+=`<div class="g2">
+    <div class="pn"><div class="pt">품목별 구독렌탈 <span class="badge">${itemArr.length}종</span></div>
+    <div class="st" style="max-height:360px"><table><thead><tr><th>#</th><th>품목</th><th class="tr">수량</th><th class="tr">할부금액</th><th class="tr">거래처</th></tr></thead><tbody>
+    ${itemArr.slice(0,50).map((it,i)=>`<tr class="clickable" onclick="openItemCusts('${it.sku}')"><td>${i+1}</td><td style="max-width:190px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${it.name}">${it.name}</td><td class="tr" style="font-weight:600;color:#a855f7">${fmt(it.q)}</td><td class="tr">${fmtM(it.inst)}</td><td class="tr">${it.cn}</td></tr>`).join('')}
+    </tbody></table></div></div>
+    <div class="pn"><div class="pt">거래처별 구독렌탈 <span class="badge">${custArr.length}개사</span></div>
+    <div class="st" style="max-height:360px"><table><thead><tr><th>#</th><th>거래처</th><th class="tr">수량</th><th class="tr">할부금액</th><th class="tr">품목</th></tr></thead><tbody>
+    ${custArr.slice(0,50).map((c,i)=>`<tr class="clickable" onclick="openCustItems('${c.name.replace(/'/g,"\\'")}')"><td>${i+1}</td><td style="max-width:190px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${c.name}">${c.name}</td><td class="tr" style="font-weight:600;color:#a855f7">${fmt(c.q)}</td><td class="tr">${fmtM(c.inst)}</td><td class="tr">${c.it}</td></tr>`).join('')}
+    </tbody></table></div></div>
+  </div>`;
   return h;
 }
 

@@ -446,6 +446,7 @@ function parseSales(rows, codeMap) {
     sku_id: r.sku_id, name: r.name, qty: r.qty,
     price: r.price,      // 단가 (per-unit, 0 if empty)
     amt: r.supply_amt,   // 공급가액 = 단가 × 수량 (총액)
+    inst: r.installment, // 할부금액(합계) — 구독렌탈할부 식별/집계용
     total: r.total, rep: r.rep, project: r.project,
   }));
 
