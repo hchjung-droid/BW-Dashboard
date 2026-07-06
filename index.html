@@ -590,10 +590,53 @@ function render(){
   const appEl=document.getElementById('app');
   appEl.style.display='';
   appEl.innerHTML=`${sidebar()}<div class="main" role="main">${page()}</div>${S.modal?renderModal():''}`;
-  bindNav();bindA11y();renderCharts();
+  bindNav();bindA11y();renderCharts();_makeSortable();
   const newMain=document.querySelector('.main');
   if(newMain&&scrollTop>0) newMain.scrollTop=scrollTop;
   if(S.modal){const m=document.querySelector('.modal');if(m){m.focus();trapFocus(m);_injectModalXlsxBtn(m)}}
+}
+// ─── 범용 표 헤더 정렬 (판매분석 페이지의 모든 표) ───
+// 기존 상태정렬(onclick 있는) 헤더는 건너뛰고, 나머지 헤더에 클릭 정렬 부여.
+function _makeSortable(){
+  if(S.pg!=='sales')return;
+  const main=document.querySelector('.main');if(!main)return;
+  main.querySelectorAll('table').forEach(tb=>{
+    const hr=tb.querySelector('thead tr');if(!hr)return;
+    [...hr.children].forEach((th,idx)=>{
+      if(th._sortBound||th.getAttribute('onclick'))return; // 이미 정렬 있는 헤더 스킵
+      th._sortBound=true;th.style.cursor='pointer';
+      if(!th.title)th.title='클릭하여 정렬';
+      th.addEventListener('click',()=>_domSort(tb,idx,th));
+    });
+  });
+}
+function _domSort(tb,idx,th){
+  const tbody=tb.querySelector('tbody');if(!tbody)return;
+  const rows=[...tbody.querySelectorAll(':scope>tr')];
+  const isFoot=r=>!!r.querySelector('td[colspan]')||/^(합계|총합|계|소계)/.test(((r.children[0]||{}).textContent||'').trim());
+  const foot=rows.filter(isFoot),body=rows.filter(r=>!isFoot(r));
+  const dir=th._sortDir==='asc'?'desc':'asc';th._sortDir=dir;
+  // 다른 헤더 인디케이터 제거
+  [...th.parentElement.children].forEach(h=>{if(h!==th){h._sortDir=null;const s=h.querySelector('.sort-ind');if(s)s.remove()}});
+  const val=td=>{
+    if(!td)return -Infinity;
+    const t=(td.textContent||'').replace(/,/g,'').trim();
+    const m=t.match(/-?\d+(\.\d+)?/);
+    return m?parseFloat(m[0]):t.toLowerCase();
+  };
+  body.sort((a,b)=>{
+    const av=val(a.children[idx]),bv=val(b.children[idx]);
+    const num=typeof av==='number'&&typeof bv==='number';
+    const r=num?av-bv:String(av).localeCompare(String(bv),'ko');
+    return dir==='asc'?r:-r;
+  });
+  body.forEach(r=>tbody.appendChild(r));
+  foot.forEach(r=>tbody.appendChild(r));
+  // # 순번 열이 있으면 재번호 (첫 셀이 숫자만인 경우)
+  let n=1;body.forEach(r=>{const c0=r.children[0];if(c0&&/^\d+$/.test((c0.textContent||'').trim()))c0.textContent=n++});
+  // 인디케이터
+  let si=th.querySelector('.sort-ind');if(!si){si=document.createElement('span');si.className='sort-ind';si.style.marginLeft='3px';si.style.fontSize='9px';th.appendChild(si)}
+  si.textContent=dir==='asc'?'▲':'▼';
 }
 // 모달 내 데이터 테이블이 있으면 상단에 엑셀 버튼 주입
 function _injectModalXlsxBtn(modal){
