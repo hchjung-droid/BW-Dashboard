@@ -2244,7 +2244,7 @@ function pgSales(){
   const salesByCat={};
   D.isd.forEach(i=>{
     const cat=getSkuCat(i.sku_id);const catNm=catMap[cat]||cat;
-    if(!salesByCat[cat]) salesByCat[cat]={cat,catNm,qty:0,amt:0,paid:0,rent:0,monthly:{},items:0};
+    if(!salesByCat[cat]) salesByCat[cat]={cat,catNm,qty:0,amt:0,paid:0,rent:0,free:0,monthly:{},items:0};
     salesByCat[cat].items++;
     selMs.forEach(m=>{
       const d=i.monthly[m];
@@ -2253,6 +2253,7 @@ function pgSales(){
         salesByCat[cat].amt+=(d.amt||0);
         salesByCat[cat].paid+=(d.pq||0);
         salesByCat[cat].rent+=(d.rq||0);
+        salesByCat[cat].free+=(d.fq||0);
         if(!salesByCat[cat].monthly[m]) salesByCat[cat].monthly[m]={qty:0,amt:0,pq:0,rq:0};
         salesByCat[cat].monthly[m].qty+=(d.qty||0);
         salesByCat[cat].monthly[m].amt+=(d.amt||0);
@@ -2294,14 +2295,14 @@ function pgSales(){
   <div class="pn"><div class="pt" style="justify-content:space-between">대분류별 매출 집계 <span class="badge">${mLabel}</span>
     <div class="btn-group" style="margin-left:auto"><div class="btn ${isAmt?'active':''}" onclick="S.salesView='amt';render()">금액</div><div class="btn ${!isAmt?'active':''}" onclick="S.salesView='qty';render()">수량</div></div><button class="xlsx-btn" onclick="exportTableCSV(this,'대분류별매출')">📥 엑셀</button></div>
     <div class="st" style="max-height:350px"><table>
-      <thead><tr><th>대분류</th><th>명칭</th><th class="tr">품목수</th><th class="tr" title="일시불(공급가액≠0) 수량">일시불</th><th class="tr" title="구독렌탈할부(공급가액0·할부>0) 수량">구독렌탈</th>${selMs.map(m=>`<th class="tr">${m.slice(5)}월</th>`).join('')}<th class="tr" style="font-weight:700">합계</th><th class="tr">비중</th></tr></thead>
+      <thead><tr><th>대분류</th><th>명칭</th><th class="tr">품목수</th><th class="tr" title="일시불(공급가액≠0) 수량">일시불</th><th class="tr" title="구독렌탈할부(공급가액0·할부>0) 수량">구독렌탈</th><th class="tr" title="무상지원(공급가액0·할부0) 수량">무상</th>${selMs.map(m=>`<th class="tr">${m.slice(5)}월</th>`).join('')}<th class="tr" style="font-weight:700">합계</th><th class="tr">비중</th></tr></thead>
       <tbody>${catList.map(c=>{const cTot=isAmt?c.amt:c.qty;const gTot=isAmt?selTotal:selQty;return`<tr class="clickable" onclick="openCatDetail('${c.cat}')">
-        <td><span class="tg tg-p">${c.cat}</span></td><td>${c.catNm}</td><td class="tr">${c.items}종</td><td class="tr">${fmt(c.paid||0)}</td><td class="tr" style="color:#a855f7">${(c.rent||0)>0?fmt(c.rent):'-'}</td>
+        <td><span class="tg tg-p">${c.cat}</span></td><td>${c.catNm}</td><td class="tr">${c.items}종</td><td class="tr">${fmt(c.paid||0)}</td><td class="tr" style="color:#a855f7">${(c.rent||0)>0?fmt(c.rent):'-'}</td><td class="tr" style="color:var(--tx2)">${(c.free||0)>0?fmt(c.free):'-'}</td>
         ${selMs.map(m=>`<td class="tr" title="일시불(구독렌탈)">${c.monthly[m]?fmt(c.monthly[m].pq||0)+' <span style="color:#a855f7;font-size:9px">('+fmt(c.monthly[m].rq||0)+')</span>':'-'}</td>`).join('')}
         <td class="tr" style="font-weight:700">${isAmt?fmtM(cTot):fmt(cTot)}</td>
         <td class="tr">${pct(cTot,gTot)}%</td></tr>`}).join('')}
       <tr style="font-weight:700;border-top:2px solid var(--bd)"><td colspan="3">합계</td>
-        <td class="tr">${fmt(catList.reduce((s,c)=>s+(c.paid||0),0))}</td><td class="tr" style="color:#a855f7">${fmt(catList.reduce((s,c)=>s+(c.rent||0),0))}</td>
+        <td class="tr">${fmt(catList.reduce((s,c)=>s+(c.paid||0),0))}</td><td class="tr" style="color:#a855f7">${fmt(catList.reduce((s,c)=>s+(c.rent||0),0))}</td><td class="tr" style="color:var(--tx2)">${fmt(catList.reduce((s,c)=>s+(c.free||0),0))}</td>
         ${selMs.map(m=>{const mp=catList.reduce((s,c)=>s+(c.monthly[m]?(c.monthly[m].pq||0):0),0);const mr=catList.reduce((s,c)=>s+(c.monthly[m]?(c.monthly[m].rq||0):0),0);return`<td class="tr">${fmt(mp)} <span style="color:#a855f7;font-size:9px">(${fmt(mr)})</span></td>`}).join('')}
         <td class="tr">${isAmt?fmtM(selTotal):fmt(selQty)}</td><td class="tr">100%</td></tr></tbody></table></div>
     <div style="font-size:10px;color:var(--tx2);margin-top:6px">* 월별 칸 = 일시불수량 <span style="color:#a855f7">(구독렌탈할부수량)</span> | 합계·비중은 상단 금액/수량 토글 기준</div></div>`;
@@ -2469,15 +2470,17 @@ function _salesRental(selMs,mLabel){
   const inSel=d=>{const mk=(d||'').substring(0,7).replace('/','-');return selMs.indexOf(mk)>=0};
   const rtx=(D.sales_tx||[]).filter(t=>t.date&&inSel(t.date)&&(t.amt||0)===0&&(t.inst||0)>0);
   if(!rtx.length)return`<div class="pn"><div class="pt">🔁 구독렌탈할부 상세 <span class="badge">${mLabel}</span></div><div style="padding:40px;text-align:center;color:var(--tx2)">선택 기간에 구독렌탈할부 거래가 없습니다.<br><span style="font-size:11px">구독렌탈할부 = 공급가액 0원 & 할부금액 > 0</span></div></div>`;
-  let totQ=0,totInst=0;const custs={},items={},byMonth={};
+  let totQ=0,totInst=0;const custs={},items={},byMonth={},cats={};
   selMs.forEach(m=>byMonth[m]={q:0,inst:0});
   rtx.forEach(t=>{
     const q=t.qty||0,ins=t.inst||0;totQ+=q;totInst+=ins;
     const mk=(t.date||'').substring(0,7).replace('/','-');if(byMonth[mk]){byMonth[mk].q+=q;byMonth[mk].inst+=ins}
     if(!custs[t.cust])custs[t.cust]={q:0,inst:0,items:new Set()};custs[t.cust].q+=q;custs[t.cust].inst+=ins;custs[t.cust].items.add(t.sku_id);
     if(!items[t.sku_id])items[t.sku_id]={name:t.name,q:0,inst:0,custs:new Set()};items[t.sku_id].q+=q;items[t.sku_id].inst+=ins;items[t.sku_id].custs.add(t.cust);
+    const ct=getSkuCat(t.sku_id);if(!cats[ct])cats[ct]={cat:ct,cn:catMap[ct]||ct,q:0,inst:0,its:new Set()};cats[ct].q+=q;cats[ct].inst+=ins;cats[ct].its.add(t.sku_id);
   });
   const itemArr=Object.keys(items).map(s=>({sku:s,name:items[s].name,q:items[s].q,inst:items[s].inst,cn:items[s].custs.size})).sort((a,b)=>b.q-a.q);
+  const catArr=Object.values(cats).map(c=>({cat:c.cat,cn:c.cn,q:c.q,inst:c.inst,it:c.its.size})).sort((a,b)=>b.q-a.q);
   const custArr=Object.keys(custs).map(c=>({name:c,q:custs[c].q,inst:custs[c].inst,it:custs[c].items.size})).sort((a,b)=>b.q-a.q);
   const kpi=(lb,v,sb,c)=>`<div class="kc"><div class="lb">${lb}</div><div class="vl" style="color:${c||'var(--tx)'}">${v}</div>${sb?`<div class="sb">${sb}</div>`:''}</div>`;
   let h=`<div class="pn"><div class="pt" style="justify-content:space-between">🔁 구독렌탈할부 상세 <span class="badge">${mLabel}</span>
@@ -2494,6 +2497,12 @@ function _salesRental(selMs,mLabel){
     <tr><td>수량(대)</td>${selMs.map(m=>`<td class="tr">${byMonth[m].q>0?fmt(byMonth[m].q):'-'}</td>`).join('')}<td class="tr" style="font-weight:700;color:#a855f7">${fmt(totQ)}</td></tr>
     <tr><td>할부금액</td>${selMs.map(m=>`<td class="tr">${byMonth[m].inst>0?fmtM(byMonth[m].inst):'-'}</td>`).join('')}<td class="tr" style="font-weight:700;color:#2563eb">${fmtM(totInst)}</td></tr>
     </tbody></table></div>`;
+  // 대분류별 구독렌탈
+  h+=`<div class="pn" style="margin-bottom:12px"><div class="pt">대분류별 구독렌탈 <span class="badge">${catArr.length}개</span></div>
+    <div class="st" style="max-height:280px"><table><thead><tr><th>대분류</th><th>명칭</th><th class="tr">수량(대)</th><th class="tr">할부금액</th><th class="tr">품목수</th><th class="tr">비중</th></tr></thead><tbody>
+    ${catArr.map(c=>`<tr><td><span class="tg tg-p">${c.cat}</span></td><td>${c.cn}</td><td class="tr" style="font-weight:600;color:#a855f7">${fmt(c.q)}</td><td class="tr">${fmtM(c.inst)}</td><td class="tr">${c.it}</td><td class="tr">${totQ?(c.q/totQ*100).toFixed(1):0}%</td></tr>`).join('')}
+    <tr style="font-weight:700;border-top:2px solid var(--bd)"><td colspan="2">합계</td><td class="tr" style="color:#a855f7">${fmt(totQ)}</td><td class="tr">${fmtM(totInst)}</td><td class="tr">-</td><td class="tr">100%</td></tr>
+    </tbody></table></div></div>`;
   // 품목별 + 거래처별
   h+=`<div class="g2">
     <div class="pn"><div class="pt">품목별 구독렌탈 <span class="badge">${itemArr.length}종</span></div>
@@ -2865,9 +2874,9 @@ function _salesCategory(selMs,mLabel,isAmt){
     const cat=getSkuCat(i.sku_id);const catNm=catMap[cat]||cat;
     const prefix=i.sku_id.startsWith('C-')?'C':'B';
     const key=prefix+'-'+cat;
-    if(!catAgg[key])catAgg[key]={key,cat,catNm,prefix,qty:0,amt:0,paid:0,rent:0,items:0,monthly:{}};
+    if(!catAgg[key])catAgg[key]={key,cat,catNm,prefix,qty:0,amt:0,paid:0,rent:0,free:0,items:0,monthly:{}};
     catAgg[key].items++;
-    selMs.forEach(m=>{const d=i.monthly[m];if(d){catAgg[key].qty+=(d.qty||0);catAgg[key].amt+=(d.amt||0);catAgg[key].paid+=(d.pq||0);catAgg[key].rent+=(d.rq||0)}});
+    selMs.forEach(m=>{const d=i.monthly[m];if(d){catAgg[key].qty+=(d.qty||0);catAgg[key].amt+=(d.amt||0);catAgg[key].paid+=(d.pq||0);catAgg[key].rent+=(d.rq||0);catAgg[key].free+=(d.fq||0)}});
     selMs.forEach(m=>{
       if(!catAgg[key].monthly[m])catAgg[key].monthly[m]={qty:0,amt:0,pq:0,rq:0};
       const d=i.monthly[m];if(d){catAgg[key].monthly[m].qty+=(d.qty||0);catAgg[key].monthly[m].amt+=(d.amt||0);catAgg[key].monthly[m].pq+=(d.pq||0);catAgg[key].monthly[m].rq+=(d.rq||0)}
@@ -2899,7 +2908,7 @@ function _salesCategory(selMs,mLabel,isAmt){
   h+=`<div class="st" style="max-height:500px;margin-top:12px"><table>
     <thead><tr>
       <th>#</th><th>구분</th><th>대분류</th><th class="tr">품목수</th><th class="tr">수량</th>
-      <th class="tr" title="일시불(공급가액≠0) 수량">일시불</th><th class="tr" title="구독렌탈할부(공급가액0·할부>0) 수량">구독렌탈</th>
+      <th class="tr" title="일시불(공급가액≠0) 수량">일시불</th><th class="tr" title="구독렌탈할부(공급가액0·할부>0) 수량">구독렌탈</th><th class="tr" title="무상지원(공급가액0·할부0) 수량">무상</th>
       <th class="tr">매출액</th><th class="tr">비중</th>
       ${selMs.map(m=>`<th class="tr">${m.slice(5)}월</th>`).join('')}
     </tr></thead>
@@ -2913,6 +2922,7 @@ function _salesCategory(selMs,mLabel,isAmt){
         <td class="tr">${fmt(c.qty)}</td>
         <td class="tr">${fmt(c.paid||0)}</td>
         <td class="tr" style="color:#a855f7">${(c.rent||0)>0?fmt(c.rent):'-'}</td>
+        <td class="tr" style="color:var(--tx2)">${(c.free||0)>0?fmt(c.free):'-'}</td>
         <td class="tr" style="font-weight:600">${fmtM(c.amt)}</td>
         <td class="tr">${pct(val,gVal)}%</td>
         ${selMs.map(m=>`<td class="tr" title="일시불(구독렌탈)">${c.monthly[m]?fmt(c.monthly[m].pq||0)+' <span style="color:#a855f7;font-size:9px">('+fmt(c.monthly[m].rq||0)+')</span>':'-'}</td>`).join('')}
