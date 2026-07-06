@@ -2683,7 +2683,8 @@ function _salesABC(selMs,mLabel,isAmt,selTotal,selQty){
     <thead><tr><th>#</th><th>등급</th><th>${view==='items'?'품목명':'거래처'}</th><th class="tr">매출</th><th class="tr">비중</th><th class="tr">누적비중</th></tr></thead>
     <tbody>${ranked.slice(0,60).map((r,i)=>{
       const gc=r.grade==='A'?'#dc2626':r.grade==='B'?'#ca8a04':'#15803d';
-      return`<tr>
+      const _click=view==='items'?`openItemCusts('${r.sku}')`:`openCustItems('${r.name.replace(/'/g,"\\'")}')`;
+      return`<tr class="clickable" onclick="${_click}">
         <td style="color:var(--tx2)">${i+1}</td>
         <td><span style="display:inline-block;padding:2px 8px;border-radius:4px;font-size:10px;font-weight:700;color:#fff;background:${gc}">${r.grade}</span></td>
         <td style="max-width:220px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${r.name}">${r.name}</td>
@@ -2961,7 +2962,7 @@ function _salesCategory(selMs,mLabel,isAmt){
     </tr></thead>
     <tbody>${catList.map((c,i)=>{
       const val=isAmt?c.amt:c.qty;const gVal=isAmt?grandAmt:grandQty;
-      return`<tr>
+      return`<tr class="clickable" onclick="openCatDetail('${c.cat}')" title="클릭 → 대분류 상세">
         <td style="color:var(--tx2)">${i+1}</td>
         <td><span class="badge" style="background:${c.prefix==='C'?'var(--ac)':'var(--c-or)'};color:#fff;font-size:10px">${c.prefix==='C'?'제품':'원재료'}</span></td>
         <td style="font-weight:500">${c.catNm}</td>
