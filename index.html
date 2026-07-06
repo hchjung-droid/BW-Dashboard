@@ -2500,7 +2500,7 @@ function _salesRental(selMs,mLabel){
   // 대분류별 구독렌탈
   h+=`<div class="pn" style="margin-bottom:12px"><div class="pt">대분류별 구독렌탈 <span class="badge">${catArr.length}개</span></div>
     <div class="st" style="max-height:280px"><table><thead><tr><th>대분류</th><th>명칭</th><th class="tr">수량(대)</th><th class="tr">할부금액</th><th class="tr">품목수</th><th class="tr">비중</th></tr></thead><tbody>
-    ${catArr.map(c=>`<tr><td><span class="tg tg-p">${c.cat}</span></td><td>${c.cn}</td><td class="tr" style="font-weight:600;color:#a855f7">${fmt(c.q)}</td><td class="tr">${fmtM(c.inst)}</td><td class="tr">${c.it}</td><td class="tr">${totQ?(c.q/totQ*100).toFixed(1):0}%</td></tr>`).join('')}
+    ${catArr.map(c=>`<tr class="clickable" onclick="openRentalCat('${c.cat}')" title="클릭 → 대분류 상세(B/C 구분)"><td><span class="tg tg-p">${c.cat}</span></td><td>${c.cn}</td><td class="tr" style="font-weight:600;color:#a855f7">${fmt(c.q)}</td><td class="tr">${fmtM(c.inst)}</td><td class="tr">${c.it}</td><td class="tr">${totQ?(c.q/totQ*100).toFixed(1):0}%</td></tr>`).join('')}
     <tr style="font-weight:700;border-top:2px solid var(--bd)"><td colspan="2">합계</td><td class="tr" style="color:#a855f7">${fmt(totQ)}</td><td class="tr">${fmtM(totInst)}</td><td class="tr">-</td><td class="tr">100%</td></tr>
     </tbody></table></div></div>`;
   // 품목별 + 거래처별
@@ -2865,6 +2865,7 @@ function _salesShops(selMs,mLabel,isAmt){
   return h;
 }
 function toggleShopSort(col){if(S.shopSort.col===col)S.shopSort.dir=S.shopSort.dir==='asc'?'desc':'asc';else{S.shopSort.col=col;S.shopSort.dir='desc'}render()}
+function toggleCatSort(col){if(!S.catSort)S.catSort={col:'qty',dir:'desc'};if(S.catSort.col===col)S.catSort.dir=S.catSort.dir==='asc'?'desc':'asc';else{S.catSort.col=col;S.catSort.dir='desc'}render()}
 
 // ─── 대분류별 판매분석 서브탭 ───
 function _salesCategory(selMs,mLabel,isAmt){
@@ -2883,7 +2884,10 @@ function _salesCategory(selMs,mLabel,isAmt){
     });
   });
   let catList=Object.values(catAgg).filter(c=>c.amt>0||c.qty>0);
-  catList.sort((a,b)=>isAmt?b.amt-a.amt:b.qty-a.qty);
+  const _cs=S.catSort||(S.catSort={col:'qty',dir:'desc'});
+  const _cg=c=>{switch(_cs.col){case'prefix':return c.prefix;case'catNm':return c.catNm;case'items':return c.items||0;case'qty':return c.qty||0;case'paid':return c.paid||0;case'rent':return c.rent||0;case'free':return c.free||0;case'amt':return c.amt||0;case'pct':return isAmt?(c.amt||0):(c.qty||0);default:return c.qty||0}};
+  catList.sort((a,b)=>{const av=_cg(a),bv=_cg(b);const r=(typeof av==='string')?String(av).localeCompare(String(bv)):av-bv;return _cs.dir==='asc'?r:-r});
+  const _ci=col=>_cs.col===col?(_cs.dir==='asc'?' ▲':' ▼'):'';
   const grandAmt=catList.reduce((s,c)=>s+c.amt,0);
   const grandQty=catList.reduce((s,c)=>s+c.qty,0);
   const cOnly=catList.filter(c=>c.prefix==='C');
@@ -2907,9 +2911,9 @@ function _salesCategory(selMs,mLabel,isAmt){
   // Table
   h+=`<div class="st" style="max-height:500px;margin-top:12px"><table>
     <thead><tr>
-      <th>#</th><th>구분</th><th>대분류</th><th class="tr">품목수</th><th class="tr">수량</th>
-      <th class="tr" title="일시불(공급가액≠0) 수량">일시불</th><th class="tr" title="구독렌탈할부(공급가액0·할부>0) 수량">구독렌탈</th><th class="tr" title="무상지원(공급가액0·할부0) 수량">무상</th>
-      <th class="tr">매출액</th><th class="tr">비중</th>
+      <th>#</th><th class="sortable" onclick="toggleCatSort('prefix')">구분${_ci('prefix')}</th><th class="sortable" onclick="toggleCatSort('catNm')">대분류${_ci('catNm')}</th><th class="sortable tr" onclick="toggleCatSort('items')">품목수${_ci('items')}</th><th class="sortable tr" onclick="toggleCatSort('qty')">수량${_ci('qty')}</th>
+      <th class="sortable tr" onclick="toggleCatSort('paid')" title="일시불(공급가액≠0) 수량">일시불${_ci('paid')}</th><th class="sortable tr" onclick="toggleCatSort('rent')" title="구독렌탈할부(공급가액0·할부>0) 수량">구독렌탈${_ci('rent')}</th><th class="sortable tr" onclick="toggleCatSort('free')" title="무상지원(공급가액0·할부0) 수량">무상${_ci('free')}</th>
+      <th class="sortable tr" onclick="toggleCatSort('amt')">매출액${_ci('amt')}</th><th class="sortable tr" onclick="toggleCatSort('pct')">비중${_ci('pct')}</th>
       ${selMs.map(m=>`<th class="tr">${m.slice(5)}월</th>`).join('')}
     </tr></thead>
     <tbody>${catList.map((c,i)=>{
@@ -2928,6 +2932,52 @@ function _salesCategory(selMs,mLabel,isAmt){
         ${selMs.map(m=>`<td class="tr" title="일시불(구독렌탈)">${c.monthly[m]?fmt(c.monthly[m].pq||0)+' <span style="color:#a855f7;font-size:9px">('+fmt(c.monthly[m].rq||0)+')</span>':'-'}</td>`).join('')}
       </tr>`}).join('')}</tbody></table></div>
   <div style="font-size:10px;color:var(--tx2);margin-top:6px">* isd(품목판매) 기준 대분류 집계 | 월별 칸 = 일시불수량 <span style="color:#a855f7">(구독렌탈할부수량)</span> | 제품(C-) 및 원재료(B-) 모두 포함</div></div>`;
+  return h;
+}
+
+// ─── 구독렌탈 대분류 상세 모달 (B/C 구분) ───
+function openRentalCat(cat){_pushModal();S.modal='rentalCat';S.modalData=cat;S.rentalCatBC='all';render()}
+function setRentalCatBC(v){S.rentalCatBC=v;render()}
+function renderRentalCatModal(){
+  const cat=S.modalData;if(!cat)return'';
+  const bc=S.rentalCatBC||'all';
+  const catMap={...C_CATS,...B_CATS};const catNm=catMap[cat]||cat;
+  const selMs=getSelectedMonths();const mLabel=periodLabel();
+  const inSel=d=>{const mk=(d||'').substring(0,7).replace('/','-');return selMs.indexOf(mk)>=0};
+  const base=(D.sales_tx||[]).filter(t=>t.date&&inSel(t.date)&&(t.amt||0)===0&&(t.inst||0)>0&&getSkuCat(t.sku_id)===cat);
+  const cQ=base.filter(t=>t.sku_id.startsWith('C-')).reduce((s,t)=>s+(t.qty||0),0);
+  const bQ=base.filter(t=>t.sku_id.startsWith('B-')).reduce((s,t)=>s+(t.qty||0),0);
+  let rtx=base;
+  if(bc==='C')rtx=base.filter(t=>t.sku_id.startsWith('C-'));
+  else if(bc==='B')rtx=base.filter(t=>t.sku_id.startsWith('B-'));
+  let totQ=0,totInst=0;const items={},custs={};
+  rtx.forEach(t=>{const q=t.qty||0,ins=t.inst||0;totQ+=q;totInst+=ins;
+    if(!items[t.sku_id])items[t.sku_id]={name:t.name,q:0,inst:0,cs:new Set()};items[t.sku_id].q+=q;items[t.sku_id].inst+=ins;items[t.sku_id].cs.add(t.cust);
+    if(!custs[t.cust])custs[t.cust]={q:0,inst:0,is:new Set()};custs[t.cust].q+=q;custs[t.cust].inst+=ins;custs[t.cust].is.add(t.sku_id);
+  });
+  const itemArr=Object.keys(items).map(s=>({sku:s,name:items[s].name,q:items[s].q,inst:items[s].inst,cn:items[s].cs.size})).sort((a,b)=>b.q-a.q);
+  const custArr=Object.keys(custs).map(c=>({name:c,q:custs[c].q,inst:custs[c].inst,it:custs[c].is.size})).sort((a,b)=>b.q-a.q);
+  const tbtn=(v,lb)=>'<div class="btn '+(bc===v?'active':'')+'" onclick="setRentalCatBC(\''+v+'\')" style="font-size:11px;padding:3px 10px">'+lb+'</div>';
+  let h='<div class="modal-overlay" onclick="if(event.target===this){_closeAllModals()}"><div class="modal" role="dialog" aria-modal="true" tabindex="-1" style="max-width:960px">'
+    +'<button class="close" aria-label="닫기" onclick="_closeAllModals()">✕</button>'
+    +'<div style="display:flex;align-items:center;gap:8px;margin-bottom:4px">'+(S.modalHistory.length>0?'<div class="btn" onclick="goBackModal()" style="font-size:11px;padding:2px 10px">← 뒤로</div>':'')+'<h3 style="margin:0"><span class="tg tg-p" style="margin-right:6px">'+cat+'</span>'+catNm+' 구독렌탈 상세</h3></div>'
+    +'<div style="font-size:11px;color:var(--tx2);margin-bottom:10px">'+mLabel+' | 구독렌탈할부(공급가액 0원·할부금액>0)</div>'
+    +'<div class="btn-group" style="margin-bottom:12px">'+tbtn('all','전체 '+fmt(cQ+bQ))+tbtn('C','제품(C) '+fmt(cQ))+tbtn('B','원재료(B) '+fmt(bQ))+'</div>'
+    +'<div class="kr" style="margin-bottom:12px">'
+    +'<div class="kc"><div class="lb">구독렌탈 수량</div><div class="vl" style="color:#a855f7">'+fmt(totQ)+'대</div></div>'
+    +'<div class="kc"><div class="lb">할부금액</div><div class="vl c-bl">'+fmtM(totInst)+'</div></div>'
+    +'<div class="kc"><div class="lb">거래처</div><div class="vl c-cy">'+custArr.length+'개사</div></div>'
+    +'<div class="kc"><div class="lb">품목</div><div class="vl c-gn">'+itemArr.length+'종</div></div>'
+    +'</div>';
+  if(!rtx.length){h+='<div style="padding:30px;text-align:center;color:var(--tx2)">해당 구분에 구독렌탈 거래가 없습니다.</div></div></div>';return h}
+  h+='<div class="g2">'
+    +'<div class="pn"><div class="pt">품목별</div><div class="st" style="max-height:320px"><table><thead><tr><th>품목</th><th class="tr">C/B</th><th class="tr">수량</th><th class="tr">할부금액</th><th class="tr">거래처</th></tr></thead><tbody>'
+    +itemArr.map(it=>'<tr class="clickable" onclick="openItemCusts(\''+it.sku+'\')"><td style="max-width:180px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="'+it.name.replace(/"/g,'&quot;')+'">'+it.name+'</td><td class="tr"><span class="tg '+(it.sku.startsWith('C-')?'tg-b':'tg-c')+'">'+(it.sku.startsWith('C-')?'C':'B')+'</span></td><td class="tr" style="font-weight:600;color:#a855f7">'+fmt(it.q)+'</td><td class="tr">'+fmtM(it.inst)+'</td><td class="tr">'+it.cn+'</td></tr>').join('')
+    +'</tbody></table></div></div>'
+    +'<div class="pn"><div class="pt">거래처별</div><div class="st" style="max-height:320px"><table><thead><tr><th>거래처</th><th class="tr">수량</th><th class="tr">할부금액</th><th class="tr">품목</th></tr></thead><tbody>'
+    +custArr.map(c=>'<tr class="clickable" onclick="openCustItems(\''+c.name.replace(/'/g,"\\'")+'\')"><td style="max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="'+c.name.replace(/"/g,'&quot;')+'">'+c.name+'</td><td class="tr" style="font-weight:600;color:#a855f7">'+fmt(c.q)+'</td><td class="tr">'+fmtM(c.inst)+'</td><td class="tr">'+c.it+'</td></tr>').join('')
+    +'</tbody></table></div></div>'
+    +'</div></div></div>';
   return h;
 }
 
@@ -3879,6 +3929,7 @@ function renderModal(){
   if(S.modal==='bomDetail')return renderBomDetailModal();
   if(S.modal==='matPriceHist')return renderMatPriceHistModal();
   if(S.modal==='salesTxDetail')return renderSalesTxDetailModal();
+  if(S.modal==='rentalCat')return renderRentalCatModal();
   return'';
 }
 
