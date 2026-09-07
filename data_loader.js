@@ -15,7 +15,9 @@
 // ============================================================
 function _n(v) {
   if (v == null || v === '') return 0;
-  const f = parseFloat(v);
+  if (typeof v === 'number') return isNaN(v) ? 0 : v;
+  // 콤마/공백 포함 숫자 텍스트("14,592,500", " 43,047 ")도 안전 파싱 (2026-06 ERP 포맷 대응)
+  const f = parseFloat(String(v).replace(/[,\s]/g, ''));
   return isNaN(f) ? 0 : f;
 }
 function _ni(v) { return Math.round(_n(v)); }
