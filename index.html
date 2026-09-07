@@ -316,6 +316,33 @@ function exportTableXLSX(btn,filename){
   let dt=new Date().toISOString().slice(0,10);
   XLSX.writeFile(wb,(filename||'export')+'_'+dt+'.xlsx');
 }
+// 타계정 상세 내역 전체 XLSX 내보내기 (화면 200행 제한 없이 현재 필터 전체 반영)
+function exportTaDetail(){
+  if(typeof XLSX==='undefined'){alert('엑셀 라이브러리 로딩 실패 (네트워크 확인)');return}
+  const taAll=D.ta||[];
+  const yr=S.selYear;
+  let f=taAll.filter(t=>(t.d||'').startsWith(yr));
+  if(S.selMonth!=='all') f=f.filter(t=>(t.d||'').substring(5,7)===S.selMonth);
+  if(S.fType!=='all') f=f.filter(t=>t.ac===S.fType);
+  if(S.search){const q=S.search.toLowerCase();f=f.filter(t=>(t.nm||'').toLowerCase().includes(q)||(t.sk||'').toLowerCase().includes(q)||(t.loc||'').toLowerCase().includes(q)||(t.dt||'').toLowerCase().includes(q))}
+  if(!f.length){alert('내보낼 데이터가 없습니다');return}
+  const head=['출고일','구분','품목코드','품목명','수량','단가','금액','계정','사용처','세부내역'];
+  const aoa=[head].concat(f.map(t=>[t.d,t.t,t.sk,t.nm,t.q||0,t.uc||0,t.a||0,t.ac,t.loc,t.dt]));
+  const ws=XLSX.utils.aoa_to_sheet(aoa);
+  const nCol=head.length;
+  const cols=[];
+  for(let i=0;i<nCol;i++){let mx=10;aoa.forEach(function(r){let v=r[i]==null?'':String(r[i]);let w=0;for(let k=0;k<v.length;k++)w+=(v.charCodeAt(k)>127?2:1);if(w>mx)mx=w});cols.push({wch:Math.min(mx+2,50)})}
+  ws['!cols']=cols;
+  const headStyle={fill:{patternType:'solid',fgColor:{rgb:'2563EB'}},font:{bold:true,color:{rgb:'FFFFFF'},sz:11},alignment:{horizontal:'center',vertical:'center'}};
+  for(let i=0;i<nCol;i++){let ref=XLSX.utils.encode_cell({c:i,r:0});if(ws[ref])ws[ref].s=headStyle}
+  for(let r=1;r<aoa.length;r++){for(let i=4;i<=6;i++){let ref=XLSX.utils.encode_cell({c:i,r:r});if(ws[ref]&&typeof ws[ref].v==='number')ws[ref].s={numFmt:'#,##0',alignment:{horizontal:'right'}}}}
+  ws['!freeze']={xSplit:0,ySplit:1};ws['!views']=[{state:'frozen',ySplit:1}];
+  const wb=XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb,ws,'타계정상세');
+  const dt=new Date().toISOString().slice(0,10);
+  const scope=yr+(S.selMonth!=='all'?'_'+S.selMonth+'월':'')+(S.fType!=='all'?'_'+S.fType:'');
+  XLSX.writeFile(wb,'타계정상세_'+scope+'_'+dt+'.xlsx');
+}
 // 한글 검색 debounce (IME 조합 중 render 방지)
 let _sTimer;
 function doSearch(v){S.search=v;clearTimeout(_sTimer);_sTimer=setTimeout(()=>{render();setTimeout(()=>{const el=document.querySelector('input[type=text]:focus,input[oninput*=doSearch]');if(!el){const inputs=document.querySelectorAll('input[type=text]');inputs.forEach(inp=>{if(inp.value===S.search){inp.focus();inp.setSelectionRange(inp.value.length,inp.value.length)}})}},10)},200)}
@@ -3868,6 +3895,7 @@ function pgOtherAcct(){
     <div class="btn primary" onclick="S.search=document.getElementById('taSearchInput').value;render()">검색</div>
     ${S.search?`<div class="btn" onclick="S.search='';render()">초기화</div>`:''}
     <span style="font-size:11px;color:var(--tx2)">${filtered.length}건</span>
+    <button class="xlsx-btn" style="margin-left:auto" onclick="exportTaDetail()" title="현재 필터(연도·월·계정·검색) 전체를 엑셀로 저장">📥 상세 엑셀</button>
   </div>
   <div class="pn" style="padding:0"><div class="st" style="max-height:450px"><table>
     <thead><tr><th>출고일</th><th>구분</th><th>품목코드</th><th style="min-width:150px">품목명</th><th class="tr">수량</th><th class="tr">단가</th><th class="tr">금액</th><th>계정</th><th style="min-width:120px">사용처</th><th style="min-width:200px">세부내역</th></tr></thead>
